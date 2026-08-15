@@ -28,7 +28,6 @@ function App() {
 
   return (
     <div className="app-container">
-      {/* Шапка */}
       <header className="header">
         <div className="header-top">
           <h1 className="logo">Engineering Hub</h1>
@@ -44,7 +43,6 @@ function App() {
         </div>
       </header>
 
-      {/* Основная область с жетонами */}
       <main className="tokens-container">
         <div className="tokens-grid">
           {tokens.map((token) => (
@@ -65,7 +63,6 @@ function App() {
         </div>
       </main>
 
-      {/* Нижняя навигация - удалена иконка "Разделы" */}
       <nav className="bottom-nav">
         <div className="nav-item nav-active">
           <span className="nav-icon">🏠</span>
