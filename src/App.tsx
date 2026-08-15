@@ -26,12 +26,12 @@ function App() {
   const manufacturers = [
     { 
       id: 'DKC', 
-      logo: '/manufacturers/dkc/brand/logo.svg',
+      logo: '/manufacturers/dkc/brand/dkc_logo_2020_new.svg',
       url: 'https://www.dkc.ru/ru/' 
     },
     { 
       id: 'EKF', 
-      logo: '/manufacturers/ekf/brand/logo.svg',
+      logo: '/manufacturers/ekf/brand/logo-ekf-white.svg',
       url: 'https://ekfgroup.com/ru' 
     },
     { 
@@ -46,7 +46,7 @@ function App() {
     },
     { 
       id: 'Systeme Electric', 
-      logo: '/manufacturers/systeme-electric/brand/logo.svg',
+      logo: '/manufacturers/systeme electric/brand/logo-main.d552ca3.svg',
       url: 'https://systeme.ru/' 
     }
   ]
