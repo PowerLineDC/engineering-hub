@@ -1,0 +1,17 @@
+{
+  "category": "mounting-plates",
+  "manufacturer": "DKC",
+  "series": "CQE N",
+  "source_category_url": "https://www.dkc.ru/ru/catalog/1869/",
+  "catalog_count": 340,
+  "import_status": "partial",
+  "products": [
+    {"article":"R5NPCE10100","name":"Монтажная плата для корпусов CQE N, ВхШ 1000х1000 мм RAM block","unit":"кмп","pack_quantity":1,"weight_kg":16.5,"volume_m3":0.02323,"size_h_mm":1000,"size_w_mm":1000,"nominal_load_kg":600,"source_url":"https://www.dkc.ru/ru/catalog/1869/r5npce10100/"},
+    {"article":"R5NPCE20160","name":"Монтажная плата для корпусов CQE N, ВхШ 2000х1600 мм RAM block","unit":"кмп","pack_quantity":1,"weight_kg":38.0,"volume_m3":0.14250,"size_h_mm":2000,"size_w_mm":1600,"nominal_load_kg":600,"source_url":"https://www.dkc.ru/ru/catalog/1869/r5npce20160/"},
+    {"article":"R5NPCE2060","name":"Монтажная плата для корпусов CQE N, ВхШ 2000х600 мм RAM block","unit":"кмп","pack_quantity":1,"weight_kg":19.5,"volume_m3":0.02793,"size_h_mm":2000,"size_w_mm":600,"nominal_load_kg":600,"source_url":"https://www.dkc.ru/ru/catalog/1869/r5npce2060/"},
+    {"article":"R5NPCE2080","name":"Монтажная плата для корпусов CQE N, ВхШ 2000х800 мм RAM block","unit":"кмп","pack_quantity":1,"weight_kg":25.0,"volume_m3":0.03933,"size_h_mm":2000,"size_w_mm":800,"nominal_load_kg":600,"source_url":"https://www.dkc.ru/ru/catalog/1869/r5npce2080/"},
+    {"article":"R5NPCE1880","name":"Монтажная плата для корпусов CQE N, ВхШ 1800х800 мм RAM block","unit":"кмп","pack_quantity":1,"weight_kg":27.4,"volume_m3":0.03570,"size_h_mm":1800,"size_w_mm":800,"nominal_load_kg":600,"source_url":"https://www.dkc.ru/ru/catalog/1869/r5npce1880/"},
+    {"article":"R5RPSP1880","name":"Монтажная плата дополнительная для корпусов CQE & CQE N, ВхШ 1800х800 мм RAM block","unit":"шт","pack_quantity":1,"weight_kg":22.3,"volume_m3":0.02657,"source_url":"https://www.dkc.ru/ru/catalog/129/r5rpsp1880/"},
+    {"article":"R5RPIE22","name":"Монтажная плата промежуточная для корпусов CQE & CQE N, В=2200 мм RAM block","unit":"шт","pack_quantity":1,"weight_kg":6.42,"volume_m3":0.00826,"source_url":"https://www.dkc.ru/ru/catalog/1869/r5rpie22/"}
+  ]
+}
