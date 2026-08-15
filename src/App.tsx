@@ -32,6 +32,20 @@ function App() {
     { id: 'Systeme Electric', logo: '/manufacturers/systeme electric/brand/logo-main.d552ca3.svg', url: 'https://systeme.ru/' }
   ]
 
+  const chintCatalogFolders = [
+    { name: 'модульные аппараты распределения электроэнергии', url: 'https://ensmas.ru/catalog/oborudovanie_nizkogo_napryazheniya/modulnye_apparaty_raspredeleniya_elektroenergii/' },
+    { name: 'модульные аппараты дифференциальной защиты', url: 'https://ensmas.ru/catalog/oborudovanie_nizkogo_napryazheniya/modulnye_apparaty_differentsialnoy_zashchity/' },
+    { name: 'модульные аппараты сигнализации и управления', url: 'https://ensmas.ru/catalog/oborudovanie_nizkogo_napryazheniya/modulnye_apparaty_signalizatsii_i_upravleniya/' },
+    { name: 'силовые аппараты распределения электроэнергии', url: 'https://ensmas.ru/catalog/oborudovanie_nizkogo_napryazheniya/silovye_apparaty_raspredeleniya_elektroenergii/' },
+    { name: 'оборудование для автоматического ввода резерва', url: 'https://ensmas.ru/catalog/oborudovanie_nizkogo_napryazheniya/oborudovanie_dlya_avtomaticheskogo_vvoda_rezerva/' },
+    { name: 'оборудование для защиты и управления двигателем', url: 'https://ensmas.ru/catalog/oborudovanie_nizkogo_napryazheniya/oborudovanie_dlya_zashchity_i_upravleniya_dvigatelem/' },
+    { name: 'оборудование сигнализации и управления', url: 'https://ensmas.ru/catalog/oborudovanie_nizkogo_napryazheniya/oborudovanie_signalizatsii_i_upravleniya_/' },
+    { name: 'измерительные приборы', url: 'https://ensmas.ru/catalog/oborudovanie_nizkogo_napryazheniya/izmeritelnye_pribory/' },
+    { name: 'оборудование для компенсации реактивной мощности', url: 'https://ensmas.ru/catalog/oborudovanie_nizkogo_napryazheniya/oborudovanie_dlya_kompensatsii_reaktivnoy_moshchnosti/' },
+    { name: 'шкафы и аксессуары', url: 'https://ensmas.ru/catalog/oborudovanie_nizkogo_napryazheniya/shkafy_i_aksessuary/' },
+    { name: 'ретрофит решения низкого напряжения', url: 'https://ensmas.ru/catalog/oborudovanie_nizkogo_napryazheniya/retrofit_resheniya_nizkogo_napryazheniya/' }
+  ]
+
   const handleTokenClick = (token: string) => {
     if (token === 'Производители') {
       setIsManufacturerOpen(true)
@@ -121,6 +135,18 @@ function App() {
               {selectedManufacturer === 'CHINT' && selectedChintFolder ? (
                 <div className="manufacturer-detail">
                   <h3 className="manufacturer-detail-name">{selectedChintFolder}</h3>
+                  {selectedChintFolder === 'Каталог' && (
+                    <div className="manufacturer-folders">
+                      {chintCatalogFolders.map((folder) => (
+                        <div key={folder.name} className="manufacturer-catalog-item">
+                          <button className="manufacturer-folder-button">{folder.name}</button>
+                          <a href={folder.url} target="_blank" rel="noopener noreferrer" className="manufacturer-folder-link">
+                            {folder.url}
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="manufacturer-detail">
