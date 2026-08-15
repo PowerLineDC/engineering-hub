@@ -1,77 +1,75 @@
-# engineering-hub
-AI-first engineering knowledge platform
-# Engineering Hub
+# React + TypeScript + Vite
 
-**Engineering Hub** — открытая AI-first платформа для электротехнической и инженерной отрасли.
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-Проект объединяет инженерные знания, производителей, оборудование, документацию, проектирование, программное обеспечение, нормативную информацию и специализированных AI-агентов в едином машиночитаемом пространстве.
+Currently, two official plugins are available:
 
-## Идея
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
 
-Современная инженерная информация существует в разрозненном виде: сайты производителей, каталоги PDF, документация, нормативные документы, проектные организации, программное обеспечение и профессиональные знания находятся в разных системах.
+## React Compiler
 
-Engineering Hub создаётся как единая точка доступа к этим данным.
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-Главный принцип проекта:
+## Expanding the ESLint configuration
 
-> **Информация должна быть удобна не только человеку, но и искусственному интеллекту.**
+If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
 
-Поэтому архитектура Hub предусматривает два уровня:
+```js
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
 
-* **Human Layer** — простой интерфейс для человека.
-* **Machine Layer** — структурированные данные, предназначенные для AI-агентов и машинного поиска.
+      // Remove tseslint.configs.recommended and replace with this
+      tseslint.configs.recommendedTypeChecked,
+      // Alternatively, use this for stricter rules
+      tseslint.configs.strictTypeChecked,
+      // Optionally, add this for stylistic rules
+      tseslint.configs.stylisticTypeChecked,
 
-## Что создаётся
+      // Other configs...
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
 
-* единая инженерная библиотека;
-* база производителей и оборудования;
-* каталог продукции и технических характеристик;
-* база проектирования и проектных организаций;
-* документация и нормативная информация;
-* инженерное программное обеспечение;
-* база интеграторов и монтажных организаций;
-* связи между объектами, оборудованием, документацией и производителями;
-* специализированные AI-агенты;
-* инженерная онтология и единая система классификации.
+```
 
-## Инженерная онтология
+You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
 
-Одна из ключевых частей проекта — формирование машиночитаемой модели инженерной отрасли.
+```js
+// eslint.config.js
+import reactX from 'eslint-plugin-react-x'
+import reactDom from 'eslint-plugin-react-dom'
 
-Например:
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+      // Enable lint rules for React
+      reactX.configs['recommended-typescript'],
+      // Enable lint rules for React DOM
+      reactDom.configs.recommended,
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
 
-**Производитель → направление → категория → серия → изделие → характеристики → документация → применяемость**
-
-В дальнейшем эти связи должны позволять AI-агентам не просто искать текст, а **понимать отношения между инженерными объектами**.
-
-## AI-first подход
-
-Engineering Hub проектируется с расчётом на то, что значительная часть пользователей системы в будущем будет представлена не людьми, а AI-агентами.
-
-Агенты смогут:
-
-* находить оборудование;
-* сравнивать характеристики;
-* искать документацию;
-* находить производителей и поставщиков;
-* подбирать инженерные решения;
-* работать со структурированными данными;
-* передавать результаты другим агентам.
-
-Человек при этом остаётся финальным участником принятия инженерного решения.
-
-## Текущий статус
-
-Проект находится на стадии разработки архитектуры и экспериментального интерфейса.
-
-Текущий frontend создаётся на **React + Vite**.
-
-Репозиторий содержит экспериментальные реализации интерфейса и постепенно будет превращаться в основу Engineering Hub.
-
-## Принцип развития
-
-Проект развивается открыто.
-
-Идеи, архитектурные решения, эксперименты и исходный код могут обсуждаться с сообществом.
-
-**Engineering Hub — это эксперимент по созданию инженерной информационной инфраструктуры, изначально подготовленной к работе с AI-агентами.**
+```
