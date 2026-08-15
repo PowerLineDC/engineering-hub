@@ -182,6 +182,23 @@ function App() {
                 >
                   {manufacturers.find(m => m.id === selectedManufacturer)?.url}
                 </a>
+
+                {selectedManufacturer === 'CHINT' && (
+                  <div className="manufacturer-folders">
+                    <button className="manufacturer-folder-button">
+                      Серия
+                    </button>
+                    <a
+                      href="https://ensmas.ru/catalog/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="manufacturer-folder-button"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Каталог
+                    </a>
+                  </div>
+                )}
               </div>
             </div>
           </div>
