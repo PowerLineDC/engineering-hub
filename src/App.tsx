@@ -26,27 +26,27 @@ function App() {
   const manufacturers = [
     { 
       id: 'DKC', 
-      logo: '🏢', 
+      logo: '/logos/dkc.png',
       url: 'https://www.dkc.ru/ru/' 
     },
     { 
       id: 'EKF', 
-      logo: '⚡', 
+      logo: '/logos/ekf.png',
       url: 'https://ekfgroup.com/ru' 
     },
     { 
       id: 'IEK', 
-      logo: '🔌', 
+      logo: '/logos/iek.png',
       url: 'https://www.iek.ru/' 
     },
     { 
       id: 'CHINT', 
-      logo: '💡', 
+      logo: '/logos/chint.png',
       url: 'https://ensmas.ru/' 
     },
     { 
       id: 'Systeme Electric', 
-      logo: '🔋', 
+      logo: '/logos/systeme-electric.png',
       url: 'https://systeme.ru/' 
     }
   ]
@@ -143,7 +143,11 @@ function App() {
                     className="manufacturer-item"
                     onClick={() => handleManufacturerClick(manufacturer.id)}
                   >
-                    <div className="manufacturer-logo">{manufacturer.logo}</div>
+                    <img 
+                      src={manufacturer.logo} 
+                      alt={`${manufacturer.id} logo`}
+                      className="manufacturer-logo"
+                    />
                     <div className="manufacturer-name">{manufacturer.id}</div>
                   </div>
                 ))}
@@ -163,9 +167,11 @@ function App() {
             </div>
             <div className="modal-body">
               <div className="manufacturer-detail">
-                <div className="manufacturer-detail-logo">
-                  {manufacturers.find(m => m.id === selectedManufacturer)?.logo}
-                </div>
+                <img 
+                  src={manufacturers.find(m => m.id === selectedManufacturer)?.logo} 
+                  alt={`${selectedManufacturer} logo`}
+                  className="manufacturer-detail-logo"
+                />
                 <h3 className="manufacturer-detail-name">{selectedManufacturer}</h3>
                 <a 
                   href={manufacturers.find(m => m.id === selectedManufacturer)?.url} 
