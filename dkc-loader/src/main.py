@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -100,7 +101,6 @@ class RobotsPolicy:
             try:
                 response = await self.client.get(robots_url)
                 if response.status_code >= 400:
-                    # Fail closed: without robots.txt we do not crawl.
                     self.parsers[origin] = None
                 else:
                     rp = RobotFileParser()
@@ -115,55 +115,106 @@ class RobotsPolicy:
 
 
 class DKCParser:
-    """Conservative parser: extracts only values explicitly present in page HTML."""
+    """Conservative parser limited to the configured catalog root."""
+
+    def __init__(self, root_url: str):
+        parsed = urlparse(root_url)
+        self.root_prefix = parsed.path.rstrip("/") + "/"
+        self.root_url = root_url.rstrip("/") + "/"
+
+    def in_scope(self, url: str) -> bool:
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"}:
+            return False
+        if parsed.netloc not in {"www.dkc.ru", "dkc.ru"}:
+            return False
+        path = parsed.path.rstrip("/") + "/"
+        return path == self.root_prefix or path.startswith(self.root_prefix)
 
     @staticmethod
-    def is_product_url(url: str) -> bool:
-        """DKC catalog category URLs are /ru/catalog/<id>/; product URLs add a slug/id."""
-        path_parts = [p for p in urlparse(url).path.split("/") if p]
-        return len(path_parts) >= 4 and path_parts[1] == "catalog"
+    def is_service_url(url: str) -> bool:
+        path = urlparse(url).path.lower()
+        return any(part in path for part in ("/compare.php", "/sale/", "/search/", "/search.php"))
+
+    def is_product_url(self, url: str) -> bool:
+        """Product pages are deeper than the catalog root, but categories are also allowed through discovery.
+        Final product detection is additionally based on the page title/content, not URL depth alone.
+        """
+        return self.in_scope(url) and not self.is_service_url(url)
 
     def parse_links(self, html: str, page_url: str) -> tuple[set[str], set[str]]:
         soup = BeautifulSoup(html, "lxml")
         catalog_links: set[str] = set()
-        product_links: set[str] = set()
+        candidate_links: set[str] = set()
         for a in soup.find_all("a", href=True):
             url = urljoin(page_url, a["href"]).split("#", 1)[0]
-            parsed = urlparse(url)
-            if parsed.scheme not in {"http", "https"}:
+            if not self.in_scope(url) or self.is_service_url(url):
                 continue
-            if parsed.netloc not in {"www.dkc.ru", "dkc.ru"}:
-                continue
-            if "/catalog/" not in parsed.path:
-                continue
-            if self.is_product_url(url):
-                product_links.add(url)
-            else:
-                catalog_links.add(url)
-        return catalog_links, product_links
+            candidate_links.add(url)
+        # All in-scope links are candidates. The product/category distinction is made
+        # from the actual page content during fetch, avoiding the previous URL-depth bug.
+        catalog_links.update(candidate_links)
+        return catalog_links, set()
 
-    def parse_product(self, html: str, url: str) -> tuple[dict, list[dict]]:
+    @staticmethod
+    def normalize_text(text: str) -> str:
+        return re.sub(r"\s+", " ", text).strip()
+
+    @staticmethod
+    def is_assembled_cqe_title(title: str | None) -> bool:
+        if not title:
+            return False
+        normalized = DKCParser.normalize_text(title).lower()
+        return normalized.startswith("напольный собранный корпус cqe n")
+
+    @staticmethod
+    def is_archived(soup: BeautifulSoup, title: str | None) -> bool:
+        page_text = DKCParser.normalize_text(soup.get_text(" ", strip=True)).lower()
+        archive_markers = (
+            "архив",
+            "архивный",
+            "снято с производства",
+            "не производится",
+            "production discontinued",
+            "discontinued",
+        )
+        return any(marker in page_text for marker in archive_markers)
+
+    def parse_product(self, html: str, url: str) -> tuple[dict | None, list[dict]]:
         soup = BeautifulSoup(html, "lxml")
-        title = soup.find("h1")
+        title_tag = soup.find("h1")
+        title = self.normalize_text(title_tag.get_text(" ", strip=True)) if title_tag else None
+
+        if self.is_assembled_cqe_title(title):
+            return None, []
+        if self.is_archived(soup, title):
+            return None, []
+
+        # A real product page normally exposes a product title and a product code.
+        # Category/navigation pages are not emitted as products.
+        if not title:
+            return None, []
+
         article = None
-        code_labels = soup.find_all(string=lambda s: s and "Код" in s.strip())
-        for label in code_labels:
-            parent_text = label.parent.get_text(" ", strip=True) if label.parent else ""
-            if parent_text.startswith("Код") and len(parent_text.split()) >= 2:
-                article = parent_text.split("Код", 1)[1].strip().strip(":")
-                if article:
-                    break
+        for label in soup.find_all(string=lambda s: s and "Код" in s.strip()):
+            parent_text = self.normalize_text(label.parent.get_text(" ", strip=True)) if label.parent else ""
+            match = re.search(r"Код\s*[:№]?\s*([A-Za-zА-Яа-я0-9._-]+)", parent_text, re.IGNORECASE)
+            if match:
+                article = match.group(1)
+                break
+
+        # If there is no article/code, treat the page as a category/navigation page.
+        if not article:
+            return None, []
 
         product = {
             "source": "DKC",
             "source_url": url,
-            "name": title.get_text(" ", strip=True) if title else None,
+            "name": title,
             "article": article,
             "characteristics": {},
         }
-        missing = [key for key in ("name", "article") if product[key] is None]
-        incomplete = [{"source_url": url, "missing_fields": missing}] if missing else []
-        return product, incomplete
+        return product, []
 
 
 async def fetch(client: httpx.AsyncClient, limiter: RateLimiter, robots: RobotsPolicy,
@@ -191,12 +242,13 @@ async def crawl(cfg: Config) -> None:
     product_urls = set(state.get("product_urls", []))
     queue = list(cfg.start_urls)
     limiter = RateLimiter(cfg.request_delay_seconds)
-    parser = DKCParser()
+    parser = DKCParser(cfg.start_urls[0])
 
     headers = {"User-Agent": cfg.user_agent, "Accept-Language": "ru,en;q=0.5"}
     timeout = httpx.Timeout(cfg.timeout_seconds)
 
     print("DKC Loader starting...", flush=True)
+    print(f"Scope: {parser.root_url}", flush=True)
     print(f"Start URLs: {len(queue)} | dry_run: {cfg.dry_run}", flush=True)
     print(f"Request delay: {cfg.request_delay_seconds}s | robots.txt: {cfg.respect_robots_txt}", flush=True)
 
@@ -204,19 +256,23 @@ async def crawl(cfg: Config) -> None:
         robots = RobotsPolicy(client, cfg.user_agent)
         while queue and len(visited) < cfg.max_pages:
             url = queue.pop(0)
-            if url in visited:
-                continue
-            parsed = urlparse(url)
-            if parsed.netloc not in cfg.allowed_hosts:
+            if url in visited or not parser.in_scope(url) or parser.is_service_url(url):
                 continue
             print(f"[DISCOVERY] {url}", flush=True)
             try:
                 html = await fetch(client, limiter, robots, url, cfg)
                 visited.add(url)
                 state["pages"] = len(visited)
-                catalog_links, found_products = parser.parse_links(html, url)
-                product_urls.update(found_products)
-                print(f"  catalog links: {len(catalog_links)} | product links found: {len(found_products)} | total products: {len(product_urls)}", flush=True)
+                catalog_links, _ = parser.parse_links(html, url)
+
+                # Determine whether this page itself is a real product page.
+                product, _ = parser.parse_product(html, url)
+                if product is not None:
+                    product_urls.add(url)
+                    print(f"  PRODUCT: {product['article']} | {product['name']}", flush=True)
+                else:
+                    print(f"  category/navigation page | links: {len(catalog_links)}", flush=True)
+
                 for link in sorted(catalog_links):
                     if link not in visited and link not in queue:
                         queue.append(link)
@@ -229,7 +285,7 @@ async def crawl(cfg: Config) -> None:
             state["product_urls"] = sorted(product_urls)
             save_state(state)
 
-        print(f"Discovery finished: {len(visited)} pages, {len(product_urls)} product URLs, {state.get('errors', 0)} errors", flush=True)
+        print(f"Discovery finished: {len(visited)} pages, {len(product_urls)} eligible product pages, {state.get('errors', 0)} errors", flush=True)
 
         for index, url in enumerate(sorted(product_urls), start=1):
             try:
@@ -238,7 +294,7 @@ async def crawl(cfg: Config) -> None:
                 product, incomplete = parser.parse_product(html, url)
                 for item in incomplete:
                     append_jsonl(INCOMPLETE_PATH, item)
-                if not cfg.dry_run:
+                if product is not None and not cfg.dry_run:
                     append_jsonl(PRODUCTS_PATH, product)
             except Exception as exc:
                 append_jsonl(ERRORS_PATH, {"url": url, "stage": "product", "error": repr(exc)})
@@ -251,10 +307,13 @@ async def crawl(cfg: Config) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="DKC catalog loader")
     parser.add_argument("--live", action="store_true", help="write extracted products to output/products.jsonl")
+    parser.add_argument("--fresh", action="store_true", help="ignore previous crawl state and start from configured root")
     args = parser.parse_args()
     cfg = load_config()
     if args.live:
         cfg.dry_run = False
+    if args.fresh and STATE_PATH.exists():
+        STATE_PATH.unlink()
     asyncio.run(crawl(cfg))
 
 
