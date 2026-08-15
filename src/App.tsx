@@ -138,8 +138,8 @@ function App() {
                       <button className="manufacturer-folder-button" onClick={() => setSelectedChintFolder('Каталог')}>
                         Каталог
                       </button>
-                      <a href="https://ensmas.ru/" target="_blank" rel="noopener noreferrer" className="manufacturer-folder-link" onClick={(e) => e.stopPropagation()}>
-                        Официальный сайт производителя
+                      <a href="https://ensmas.ru/catalog/" target="_blank" rel="noopener noreferrer" className="manufacturer-folder-link" onClick={(e) => e.stopPropagation()}>
+                        https://ensmas.ru/catalog/
                       </a>
                     </div>
                   )}
