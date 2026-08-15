@@ -1,0 +1,16 @@
+{
+  "start_urls": [
+    "https://www.dkc.ru/ru/catalog/2095/"
+  ],
+  "allowed_hosts": ["www.dkc.ru", "dkc.ru"],
+  "request_delay_seconds": 2.0,
+  "max_concurrency": 2,
+  "timeout_seconds": 30,
+  "max_retries": 3,
+  "user_agent": "EngineeringHub-DKC-Loader/0.1",
+  "respect_robots_txt": true,
+  "max_pages": 10000,
+  "follow_external_links": false,
+  "save_images": false,
+  "dry_run": true
+}
