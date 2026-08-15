@@ -1,0 +1,6 @@
+output/state.json
+output/products.jsonl
+output/errors.jsonl
+output/incomplete.jsonl
+__pycache__/
+.venv/
