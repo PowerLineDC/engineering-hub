@@ -26,27 +26,27 @@ function App() {
   const manufacturers = [
     { 
       id: 'DKC', 
-      logo: '/logos/dkc.png',
+      logo: '/manufacturers/dkc/brand/logo.svg',
       url: 'https://www.dkc.ru/ru/' 
     },
     { 
       id: 'EKF', 
-      logo: '/logos/ekf.png',
+      logo: '/manufacturers/ekf/brand/logo.svg',
       url: 'https://ekfgroup.com/ru' 
     },
     { 
       id: 'IEK', 
-      logo: '/logos/iek.png',
+      logo: '/manufacturers/iek/brand/logo.svg',
       url: 'https://www.iek.ru/' 
     },
     { 
       id: 'CHINT', 
-      logo: '/logos/chint.png',
+      logo: '/manufacturers/chint/brand/logo.svg',
       url: 'https://ensmas.ru/' 
     },
     { 
       id: 'Systeme Electric', 
-      logo: '/logos/systeme-electric.png',
+      logo: '/manufacturers/systeme-electric/brand/logo.svg',
       url: 'https://systeme.ru/' 
     }
   ]
@@ -145,7 +145,7 @@ function App() {
                   >
                     <img 
                       src={manufacturer.logo} 
-                      alt={`${manufacturer.id} logo`}
+                      alt={manufacturer.id}
                       className="manufacturer-logo"
                     />
                     <div className="manufacturer-name">{manufacturer.id}</div>
@@ -169,17 +169,18 @@ function App() {
               <div className="manufacturer-detail">
                 <img 
                   src={manufacturers.find(m => m.id === selectedManufacturer)?.logo} 
-                  alt={`${selectedManufacturer} logo`}
+                  alt={selectedManufacturer}
                   className="manufacturer-detail-logo"
                 />
                 <h3 className="manufacturer-detail-name">{selectedManufacturer}</h3>
                 <a 
-                  href={manufacturers.find(m => m.id === selectedManufacturer)?.url} 
+                  href={manufacturers.find(m => m.id === selectedManufacturer)?.url}
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="manufacturer-link"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  Официальный сайт
+                  {manufacturers.find(m => m.id === selectedManufacturer)?.url}
                 </a>
               </div>
             </div>
