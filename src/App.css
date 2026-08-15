@@ -380,6 +380,40 @@ body {
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
 }
 
+/* Папки производителя */
+.manufacturer-folders {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 320px;
+  margin-top: 5px;
+}
+
+.manufacturer-folder-button {
+  display: block;
+  width: 100%;
+  padding: 12px 24px;
+  background: #0a0a0a;
+  color: #8bc34a;
+  text-decoration: none;
+  text-align: center;
+  border-radius: 8px;
+  border: 1px solid #3a3a3a;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.manufacturer-folder-button:hover {
+  background: #2a2a2a;
+  border-color: #4a4a4a;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
 /* Адаптивность */
 @media (max-width: 600px) {
   .tokens-grid {
@@ -429,6 +463,11 @@ body {
   }
   
   .manufacturer-link {
+    padding: 10px 16px;
+    font-size: 12px;
+  }
+
+  .manufacturer-folder-button {
     padding: 10px 16px;
     font-size: 12px;
   }
