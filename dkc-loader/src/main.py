@@ -100,6 +100,7 @@ class RobotsPolicy:
             try:
                 response = await self.client.get(robots_url)
                 if response.status_code >= 400:
+                    # Fail closed: without robots.txt we do not crawl.
                     self.parsers[origin] = None
                 else:
                     rp = RobotFileParser()
@@ -107,7 +108,6 @@ class RobotsPolicy:
                     rp.parse(response.text.splitlines())
                     self.parsers[origin] = rp
             except httpx.HTTPError:
-                # If robots.txt cannot be retrieved, fail closed.
                 self.parsers[origin] = None
                 return False
         rp = self.parsers[origin]
@@ -116,6 +116,12 @@ class RobotsPolicy:
 
 class DKCParser:
     """Conservative parser: extracts only values explicitly present in page HTML."""
+
+    @staticmethod
+    def is_product_url(url: str) -> bool:
+        """DKC catalog category URLs are /ru/catalog/<id>/; product URLs add a slug/id."""
+        path_parts = [p for p in urlparse(url).path.split("/") if p]
+        return len(path_parts) >= 4 and path_parts[1] == "catalog"
 
     def parse_links(self, html: str, page_url: str) -> tuple[set[str], set[str]]:
         soup = BeautifulSoup(html, "lxml")
@@ -130,8 +136,7 @@ class DKCParser:
                 continue
             if "/catalog/" not in parsed.path:
                 continue
-            parts = [p for p in parsed.path.split("/") if p]
-            if len(parts) >= 3:
+            if self.is_product_url(url):
                 product_links.add(url)
             else:
                 catalog_links.add(url)
@@ -191,6 +196,10 @@ async def crawl(cfg: Config) -> None:
     headers = {"User-Agent": cfg.user_agent, "Accept-Language": "ru,en;q=0.5"}
     timeout = httpx.Timeout(cfg.timeout_seconds)
 
+    print("DKC Loader starting...", flush=True)
+    print(f"Start URLs: {len(queue)} | dry_run: {cfg.dry_run}", flush=True)
+    print(f"Request delay: {cfg.request_delay_seconds}s | robots.txt: {cfg.respect_robots_txt}", flush=True)
+
     async with httpx.AsyncClient(headers=headers, timeout=timeout) as client:
         robots = RobotsPolicy(client, cfg.user_agent)
         while queue and len(visited) < cfg.max_pages:
@@ -200,25 +209,31 @@ async def crawl(cfg: Config) -> None:
             parsed = urlparse(url)
             if parsed.netloc not in cfg.allowed_hosts:
                 continue
+            print(f"[DISCOVERY] {url}", flush=True)
             try:
                 html = await fetch(client, limiter, robots, url, cfg)
                 visited.add(url)
                 state["pages"] = len(visited)
                 catalog_links, found_products = parser.parse_links(html, url)
                 product_urls.update(found_products)
+                print(f"  catalog links: {len(catalog_links)} | product links found: {len(found_products)} | total products: {len(product_urls)}", flush=True)
                 for link in sorted(catalog_links):
                     if link not in visited and link not in queue:
                         queue.append(link)
             except Exception as exc:
                 state["errors"] = state.get("errors", 0) + 1
                 append_jsonl(ERRORS_PATH, {"url": url, "stage": "discovery", "error": repr(exc)})
+                print(f"  ERROR: {exc!r}", flush=True)
 
             state["visited"] = sorted(visited)
             state["product_urls"] = sorted(product_urls)
             save_state(state)
 
-        for url in sorted(product_urls):
+        print(f"Discovery finished: {len(visited)} pages, {len(product_urls)} product URLs, {state.get('errors', 0)} errors", flush=True)
+
+        for index, url in enumerate(sorted(product_urls), start=1):
             try:
+                print(f"[PRODUCT {index}/{len(product_urls)}] {url}", flush=True)
                 html = await fetch(client, limiter, robots, url, cfg)
                 product, incomplete = parser.parse_product(html, url)
                 for item in incomplete:
@@ -227,8 +242,10 @@ async def crawl(cfg: Config) -> None:
                     append_jsonl(PRODUCTS_PATH, product)
             except Exception as exc:
                 append_jsonl(ERRORS_PATH, {"url": url, "stage": "product", "error": repr(exc)})
+                print(f"  ERROR: {exc!r}", flush=True)
 
     save_state(state)
+    print("DKC Loader finished.", flush=True)
 
 
 def main() -> None:
