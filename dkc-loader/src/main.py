@@ -7,6 +7,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
+from urllib.robotparser import RobotFileParser
 
 import httpx
 from bs4 import BeautifulSoup
@@ -85,11 +86,36 @@ class RateLimiter:
             self.last_request = time.monotonic()
 
 
+class RobotsPolicy:
+    def __init__(self, client: httpx.AsyncClient, user_agent: str):
+        self.client = client
+        self.user_agent = user_agent
+        self.parsers: dict[str, RobotFileParser | None] = {}
+
+    async def allowed(self, url: str) -> bool:
+        parsed = urlparse(url)
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+        if origin not in self.parsers:
+            robots_url = f"{origin}/robots.txt"
+            try:
+                response = await self.client.get(robots_url)
+                if response.status_code >= 400:
+                    self.parsers[origin] = None
+                else:
+                    rp = RobotFileParser()
+                    rp.set_url(robots_url)
+                    rp.parse(response.text.splitlines())
+                    self.parsers[origin] = rp
+            except httpx.HTTPError:
+                # If robots.txt cannot be retrieved, fail closed.
+                self.parsers[origin] = None
+                return False
+        rp = self.parsers[origin]
+        return False if rp is None else rp.can_fetch(self.user_agent, url)
+
+
 class DKCParser:
     """Conservative parser: extracts only values explicitly present in page HTML."""
-
-    def __init__(self, base_url: str):
-        self.base_url = base_url
 
     def parse_links(self, html: str, page_url: str) -> tuple[set[str], set[str]]:
         soup = BeautifulSoup(html, "lxml")
@@ -104,9 +130,8 @@ class DKCParser:
                 continue
             if "/catalog/" not in parsed.path:
                 continue
-            # Product pages on DKC contain an article-like final path segment.
             parts = [p for p in parsed.path.split("/") if p]
-            if len(parts) >= 3 and parts[-1] not in {"catalog"} and parts[-1] != parts[-2]:
+            if len(parts) >= 3:
                 product_links.add(url)
             else:
                 catalog_links.add(url)
@@ -115,10 +140,7 @@ class DKCParser:
     def parse_product(self, html: str, url: str) -> tuple[dict, list[dict]]:
         soup = BeautifulSoup(html, "lxml")
         title = soup.find("h1")
-        text = soup.get_text(" ", strip=True)
         article = None
-        # Do not infer article numbers from arbitrary text. Accept only an explicit
-        # "Код" label followed by a value in nearby page text.
         code_labels = soup.find_all(string=lambda s: s and "Код" in s.strip())
         for label in code_labels:
             parent_text = label.parent.get_text(" ", strip=True) if label.parent else ""
@@ -134,18 +156,16 @@ class DKCParser:
             "article": article,
             "characteristics": {},
         }
-
-        incomplete = []
-        if product["name"] is None:
-            incomplete.append("name")
-        if product["article"] is None:
-            incomplete.append("article")
-        if incomplete:
-            return product, [{"source_url": url, "missing_fields": incomplete}]
-        return product, []
+        missing = [key for key in ("name", "article") if product[key] is None]
+        incomplete = [{"source_url": url, "missing_fields": missing}] if missing else []
+        return product, incomplete
 
 
-async def fetch(client: httpx.AsyncClient, limiter: RateLimiter, url: str, cfg: Config) -> str:
+async def fetch(client: httpx.AsyncClient, limiter: RateLimiter, robots: RobotsPolicy,
+                url: str, cfg: Config) -> str:
+    if cfg.respect_robots_txt and not await robots.allowed(url):
+        raise PermissionError(f"robots.txt does not permit crawling: {url}")
+
     last_error = None
     for attempt in range(cfg.max_retries + 1):
         try:
@@ -166,13 +186,13 @@ async def crawl(cfg: Config) -> None:
     product_urls = set(state.get("product_urls", []))
     queue = list(cfg.start_urls)
     limiter = RateLimiter(cfg.request_delay_seconds)
-    parser = DKCParser(cfg.start_urls[0])
-    semaphore = asyncio.Semaphore(cfg.max_concurrency)
+    parser = DKCParser()
 
     headers = {"User-Agent": cfg.user_agent, "Accept-Language": "ru,en;q=0.5"}
     timeout = httpx.Timeout(cfg.timeout_seconds)
 
     async with httpx.AsyncClient(headers=headers, timeout=timeout) as client:
+        robots = RobotsPolicy(client, cfg.user_agent)
         while queue and len(visited) < cfg.max_pages:
             url = queue.pop(0)
             if url in visited:
@@ -180,10 +200,8 @@ async def crawl(cfg: Config) -> None:
             parsed = urlparse(url)
             if parsed.netloc not in cfg.allowed_hosts:
                 continue
-
             try:
-                async with semaphore:
-                    html = await fetch(client, limiter, url, cfg)
+                html = await fetch(client, limiter, robots, url, cfg)
                 visited.add(url)
                 state["pages"] = len(visited)
                 catalog_links, found_products = parser.parse_links(html, url)
@@ -193,26 +211,22 @@ async def crawl(cfg: Config) -> None:
                         queue.append(link)
             except Exception as exc:
                 state["errors"] = state.get("errors", 0) + 1
-                append_jsonl(ERRORS_PATH, {"url": url, "error": repr(exc)})
+                append_jsonl(ERRORS_PATH, {"url": url, "stage": "discovery", "error": repr(exc)})
 
             state["visited"] = sorted(visited)
             state["product_urls"] = sorted(product_urls)
             save_state(state)
 
-    # Product extraction is deliberately separate from discovery so the parser can
-    # be validated against real DKC pages before mass-writing the Engineering Hub data.
-    for url in sorted(product_urls):
-        try:
-            async with semaphore:
-                html = await fetch(client, limiter, url, cfg)
-            product, incomplete = parser.parse_product(html, url)
-            if incomplete:
+        for url in sorted(product_urls):
+            try:
+                html = await fetch(client, limiter, robots, url, cfg)
+                product, incomplete = parser.parse_product(html, url)
                 for item in incomplete:
                     append_jsonl(INCOMPLETE_PATH, item)
-            if not cfg.dry_run:
-                append_jsonl(PRODUCTS_PATH, product)
-        except Exception as exc:
-            append_jsonl(ERRORS_PATH, {"url": url, "stage": "product", "error": repr(exc)})
+                if not cfg.dry_run:
+                    append_jsonl(PRODUCTS_PATH, product)
+            except Exception as exc:
+                append_jsonl(ERRORS_PATH, {"url": url, "stage": "product", "error": repr(exc)})
 
     save_state(state)
 
