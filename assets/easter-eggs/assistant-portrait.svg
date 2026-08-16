@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 867 1200" role="img" aria-labelledby="title desc">
+<title>Engineering Hub assistant portrait easter egg</title>
+<desc>Stylized anime portrait inspired by the green-haired character reference at Avavatar image 48700.</desc>
+<defs>
+  <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#7dd3fc"/><stop offset="1" stop-color="#dff7ff"/></linearGradient>
+  <linearGradient id="hair" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#075f4f"/><stop offset=".48" stop-color="#18a878"/><stop offset="1" stop-color="#8ee8b5"/></linearGradient>
+  <linearGradient id="shirt" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#d8e4ee"/></linearGradient>
+</defs>
+<rect width="867" height="1200" fill="url(#sky)"/>
+<circle cx="720" cy="150" r="92" fill="#fff8c7" opacity=".7"/>
+<path d="M0 880 Q180 790 350 860 T867 835 V1200 H0Z" fill="#55b9a1" opacity=".55"/>
+<path d="M0 950 Q190 860 380 950 T867 925 V1200 H0Z" fill="#197d72" opacity=".55"/>
+
+<!-- long green hair -->
+<path d="M207 490 Q176 245 330 125 Q475 12 623 132 Q744 231 691 500 L735 875 Q651 944 595 811 L553 558 L298 574 L257 866 Q196 934 141 865Z" fill="url(#hair)" stroke="#064d42" stroke-width="14"/>
+<path d="M263 301 Q340 116 517 135 Q639 149 690 293 Q620 237 557 263 Q457 191 263 301Z" fill="#0a6f58" opacity=".9"/>
+
+<!-- face -->
+<path d="M300 300 Q431 239 565 307 L589 489 Q574 616 438 665 Q294 613 278 488Z" fill="#ffe3d0" stroke="#8b5547" stroke-width="8"/>
+<!-- fringe -->
+<path d="M257 327 Q289 177 444 180 Q599 179 638 324 Q574 286 530 339 Q479 245 420 346 Q369 270 319 362Z" fill="url(#hair)" stroke="#064d42" stroke-width="10"/>
+<!-- eyes -->
+<ellipse cx="352" cy="441" rx="34" ry="43" fill="#fff"/><ellipse cx="514" cy="441" rx="34" ry="43" fill="#fff"/>
+<ellipse cx="358" cy="448" rx="16" ry="25" fill="#177d68"/><ellipse cx="508" cy="448" rx="16" ry="25" fill="#177d68"/>
+<circle cx="364" cy="438" r="6" fill="#fff"/><circle cx="514" cy="438" r="6" fill="#fff"/>
+<path d="M397 531 Q438 559 481 531" fill="none" stroke="#a64d59" stroke-width="9" stroke-linecap="round"/>
+
+<!-- hair side strands -->
+<path d="M278 354 Q190 441 231 641 Q256 763 199 902 Q306 840 309 680 L322 545Z" fill="url(#hair)" stroke="#064d42" stroke-width="11"/>
+<path d="M581 348 Q675 429 634 640 Q610 758 681 889 Q568 830 557 671 L546 545Z" fill="url(#hair)" stroke="#064d42" stroke-width="11"/>
+
+<!-- school-uniform style upper body -->
+<path d="M300 626 Q431 687 567 626 Q684 688 744 856 L681 1200 H185 L123 856 Q190 688 300 626Z" fill="url(#shirt)" stroke="#405566" stroke-width="12"/>
+<path d="M337 653 L432 777 L529 653 L491 635 L432 706 L373 635Z" fill="#203b4b"/>
+<path d="M432 708 L395 804 L432 851 L469 804Z" fill="#35a984"/>
+<path d="M204 878 Q432 956 662 878" fill="none" stroke="#b5c8d5" stroke-width="10" opacity=".8"/>
+
+<!-- subtle assistant mark -->
+<circle cx="432" cy="1050" r="58" fill="#0b3d35" opacity=".9"/>
+<path d="M404 1050 L420 1034 L432 1046 L444 1034 L460 1050 L444 1066 L432 1054 L420 1066Z" fill="#a5f3d0"/>
+</svg>
