@@ -137,9 +137,6 @@ class DKCParser:
         return any(part in path for part in ("/compare.php", "/sale/", "/search/", "/search.php"))
 
     def is_product_url(self, url: str) -> bool:
-        """Product pages are deeper than the catalog root, but categories are also allowed through discovery.
-        Final product detection is additionally based on the page title/content, not URL depth alone.
-        """
         return self.in_scope(url) and not self.is_service_url(url)
 
     def parse_links(self, html: str, page_url: str) -> tuple[set[str], set[str]]:
@@ -151,8 +148,6 @@ class DKCParser:
             if not self.in_scope(url) or self.is_service_url(url):
                 continue
             candidate_links.add(url)
-        # All in-scope links are candidates. The product/category distinction is made
-        # from the actual page content during fetch, avoiding the previous URL-depth bug.
         catalog_links.update(candidate_links)
         return catalog_links, set()
 
@@ -168,17 +163,59 @@ class DKCParser:
         return normalized.startswith("напольный собранный корпус cqe n")
 
     @staticmethod
-    def is_archived(soup: BeautifulSoup, title: str | None) -> bool:
+    def is_excluded_product(soup: BeautifulSoup, title: str | None) -> bool:
         page_text = DKCParser.normalize_text(soup.get_text(" ", strip=True)).lower()
-        archive_markers = (
-            "архив",
+        title_text = DKCParser.normalize_text(title or "").lower()
+        text = f"{title_text} {page_text}"
+
+        # Товар НЕ загружать, если:
+        # 1. архивный;
+        # 2. снят с производства;
+        # 3. не производится;
+        # 4. является старой версией;
+        # 5. содержит указание «замена на ...»;
+        # 6. содержит аналогичные признаки того, что товар заменён другим артикулом.
+        exclusion_markers = (
             "архивный",
+            "архив",
+            "снят с производства",
             "снято с производства",
             "не производится",
-            "production discontinued",
-            "discontinued",
+            "старая версия",
+            "старой версии",
+            "замена на",
+            "заменен на",
+            "заменён на",
+            "взамен",
         )
-        return any(marker in page_text for marker in archive_markers)
+        return any(marker in text for marker in exclusion_markers)
+
+    @staticmethod
+    def extract_article(soup: BeautifulSoup) -> str | None:
+        # Сначала ищем код в тексте всей карточки, а не только в непосредственном родителе
+        # текстового узла "Код".
+        text = DKCParser.normalize_text(soup.get_text(" ", strip=True))
+        match = re.search(
+            r"\bКод\s*[:№]?\s*([A-Za-zА-Яа-я0-9._-]+)",
+            text,
+            re.IGNORECASE,
+        )
+        if match:
+            return match.group(1)
+
+        for tag in soup.find_all(string=re.compile(r"^\s*Код\s*[:№]?\s*$", re.IGNORECASE)):
+            parent = tag.parent
+            if not parent:
+                continue
+            parent_text = DKCParser.normalize_text(parent.parent.get_text(" ", strip=True)) if parent.parent else ""
+            match = re.search(
+                r"\bКод\s*[:№]?\s*([A-Za-zА-Яа-я0-9._-]+)",
+                parent_text,
+                re.IGNORECASE,
+            )
+            if match:
+                return match.group(1)
+        return None
 
     def parse_product(self, html: str, url: str) -> tuple[dict | None, list[dict]]:
         soup = BeautifulSoup(html, "lxml")
@@ -187,23 +224,12 @@ class DKCParser:
 
         if self.is_assembled_cqe_title(title):
             return None, []
-        if self.is_archived(soup, title):
+        if self.is_excluded_product(soup, title):
             return None, []
-
-        # A real product page normally exposes a product title and a product code.
-        # Category/navigation pages are not emitted as products.
         if not title:
             return None, []
 
-        article = None
-        for label in soup.find_all(string=lambda s: s and "Код" in s.strip()):
-            parent_text = self.normalize_text(label.parent.get_text(" ", strip=True)) if label.parent else ""
-            match = re.search(r"Код\s*[:№]?\s*([A-Za-zА-Яа-я0-9._-]+)", parent_text, re.IGNORECASE)
-            if match:
-                article = match.group(1)
-                break
-
-        # If there is no article/code, treat the page as a category/navigation page.
+        article = self.extract_article(soup)
         if not article:
             return None, []
 
@@ -265,7 +291,6 @@ async def crawl(cfg: Config) -> None:
                 state["pages"] = len(visited)
                 catalog_links, _ = parser.parse_links(html, url)
 
-                # Determine whether this page itself is a real product page.
                 product, _ = parser.parse_product(html, url)
                 if product is not None:
                     product_urls.add(url)
