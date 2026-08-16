@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1200">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#10151c"/>
+      <stop offset="1" stop-color="#20283a"/>
+    </linearGradient>
+    <linearGradient id="hair" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#050507"/>
+      <stop offset="0.5" stop-color="#17151c"/>
+      <stop offset="1" stop-color="#030304"/>
+    </linearGradient>
+    <linearGradient id="dress" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#29243b"/>
+      <stop offset="1" stop-color="#0d0c16"/>
+    </linearGradient>
+    <radialGradient id="skin" cx="50%" cy="35%" r="70%">
+      <stop offset="0" stop-color="#f4ddd4"/>
+      <stop offset="1" stop-color="#c9a9a3"/>
+    </radialGradient>
+    <filter id="soft"><feGaussianBlur stdDeviation="18"/></filter>
+  </defs>
+
+  <rect width="800" height="1200" fill="url(#bg)"/>
+  <ellipse cx="400" cy="1080" rx="260" ry="55" fill="#050609" opacity=".7" filter="url(#soft)"/>
+
+  <!-- long black hair -->
+  <path d="M205 505 C125 315 170 115 365 85 C545 58 665 190 612 405 L635 870 C580 960 520 1005 455 1015 L340 1010 C270 980 205 925 165 850 Z" fill="url(#hair)"/>
+  <path d="M230 250 C170 380 210 760 250 900" fill="none" stroke="#2b2932" stroke-width="18" opacity=".55"/>
+  <path d="M565 220 C625 390 580 760 545 920" fill="none" stroke="#2b2932" stroke-width="16" opacity=".45"/>
+
+  <!-- neck and shoulders -->
+  <path d="M330 500 L325 610 C285 640 230 650 205 690 C280 750 520 750 595 690 C570 650 515 640 475 610 L470 500 Z" fill="url(#skin)"/>
+
+  <!-- face -->
+  <path d="M290 230 C320 165 480 165 510 230 L505 440 C485 520 440 565 400 570 C360 565 315 520 295 440 Z" fill="url(#skin)"/>
+  <!-- ears -->
+  <ellipse cx="292" cy="375" rx="22" ry="42" fill="#d8bcb5"/>
+  <ellipse cx="508" cy="375" rx="22" ry="42" fill="#d8bcb5"/>
+
+  <!-- hair framing face -->
+  <path d="M285 270 C260 195 320 135 400 145 C480 135 540 195 515 270 C485 220 450 205 400 210 C350 205 315 220 285 270 Z" fill="url(#hair)"/>
+  <path d="M290 245 C255 320 275 460 330 515 C305 455 315 350 320 275 Z" fill="#08080b"/>
+  <path d="M510 245 C545 320 525 460 470 515 C495 455 485 350 480 275 Z" fill="#08080b"/>
+
+  <!-- eyes -->
+  <path d="M330 355 Q365 330 390 355 Q365 385 330 355" fill="#f7f0ed"/>
+  <ellipse cx="360" cy="357" rx="11" ry="15" fill="#3e566b"/>
+  <circle cx="363" cy="352" r="4" fill="#ffffff"/>
+  <path d="M470 355 Q435 330 410 355 Q435 385 470 355" fill="#f7f0ed"/>
+  <ellipse cx="440" cy="357" rx="11" ry="15" fill="#3e566b"/>
+  <circle cx="443" cy="352" r="4" fill="#ffffff"/>
+  <path d="M327 326 Q360 306 389 325" fill="none" stroke="#15131a" stroke-width="8" stroke-linecap="round"/>
+  <path d="M473 326 Q440 306 411 325" fill="none" stroke="#15131a" stroke-width="8" stroke-linecap="round"/>
+
+  <!-- nose and mouth -->
+  <path d="M400 365 C392 400 389 418 402 425" fill="none" stroke="#a9827c" stroke-width="5" stroke-linecap="round"/>
+  <path d="M370 455 Q400 470 430 455" fill="none" stroke="#7f4f57" stroke-width="6" stroke-linecap="round"/>
+
+  <!-- dress -->
+  <path d="M325 610 C285 625 220 660 185 730 L155 1120 L645 1120 L615 730 C580 660 515 625 475 610 L445 700 L400 735 L355 700 Z" fill="url(#dress)"/>
+  <!-- neckline and fitted bodice -->
+  <path d="M330 610 Q350 675 400 705 Q450 675 470 610" fill="none" stroke="#8e789f" stroke-width="5" opacity=".75"/>
+  <path d="M355 700 L400 735 L445 700" fill="none" stroke="#b89bbd" stroke-width="4" opacity=".65"/>
+  <path d="M300 755 Q400 790 500 755" fill="none" stroke="#403653" stroke-width="8"/>
+  <!-- split -->
+  <path d="M400 785 L400 1120" stroke="#75647f" stroke-width="4" opacity=".65"/>
+  <path d="M400 880 L365 1120 L435 1120 Z" fill="#171522"/>
+
+  <!-- subtle fantasy motif -->
+  <path d="M400 745 C385 765 385 790 400 805 C415 790 415 765 400 745 Z" fill="#b7a1c7" opacity=".55"/>
+  <circle cx="400" cy="775" r="5" fill="#eee5f0"/>
+
+  <!-- caption -->
+  <text x="400" y="1155" text-anchor="middle" fill="#cfc8d8" font-family="Georgia, serif" font-size="24" letter-spacing="3">ENGINEERING HUB — CHARACTER CONCEPT</text>
+</svg>
