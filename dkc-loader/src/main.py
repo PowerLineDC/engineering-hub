@@ -156,25 +156,24 @@ class DKCParser:
         return re.sub(r"\s+", " ", text).strip()
 
     @staticmethod
+    def is_catalog_page(url: str) -> bool:
+        path = urlparse(url).path.rstrip("/")
+        if path == "/ru/catalog/2095":
+            return True
+        return bool(re.search(r"/ru/catalog/2095/?$", path))
+
+    @staticmethod
     def is_assembled_cqe_title(title: str | None) -> bool:
         if not title:
             return False
         normalized = DKCParser.normalize_text(title).lower()
-        return normalized.startswith("напольный собранный корпус cqe n")
+        return normalized.startswith("напольный собранный корпус cqe n") or normalized.startswith("корпуса напольные cqe n")
 
     @staticmethod
     def is_excluded_product(soup: BeautifulSoup, title: str | None) -> bool:
         page_text = DKCParser.normalize_text(soup.get_text(" ", strip=True)).lower()
         title_text = DKCParser.normalize_text(title or "").lower()
         text = f"{title_text} {page_text}"
-
-        # Товар НЕ загружать, если:
-        # 1. архивный;
-        # 2. снят с производства;
-        # 3. не производится;
-        # 4. является старой версией;
-        # 5. содержит указание «замена на ...»;
-        # 6. содержит аналогичные признаки того, что товар заменён другим артикулом.
         exclusion_markers = (
             "архивный",
             "архив",
@@ -192,36 +191,76 @@ class DKCParser:
 
     @staticmethod
     def extract_article(soup: BeautifulSoup) -> str | None:
-        # Сначала ищем код в тексте всей карточки, а не только в непосредственном родителе
-        # текстового узла "Код".
-        text = DKCParser.normalize_text(soup.get_text(" ", strip=True))
-        match = re.search(
-            r"\bКод\s*[:№]?\s*([A-Za-zА-Яа-я0-9._-]+)",
-            text,
-            re.IGNORECASE,
-        )
-        if match:
-            return match.group(1)
-
-        for tag in soup.find_all(string=re.compile(r"^\s*Код\s*[:№]?\s*$", re.IGNORECASE)):
-            parent = tag.parent
-            if not parent:
+        for node in soup.find_all(string=re.compile(r"Код", re.IGNORECASE)):
+            text = DKCParser.normalize_text(str(node))
+            match = re.fullmatch(r"Код\s*[:№]?", text, re.IGNORECASE)
+            if not match:
                 continue
-            parent_text = DKCParser.normalize_text(parent.parent.get_text(" ", strip=True)) if parent.parent else ""
-            match = re.search(
-                r"\bКод\s*[:№]?\s*([A-Za-zА-Яа-я0-9._-]+)",
-                parent_text,
-                re.IGNORECASE,
-            )
-            if match:
-                return match.group(1)
+            parent = node.parent
+            for container in (parent, parent.parent if parent else None, parent.parent.parent if parent and parent.parent else None):
+                if not container:
+                    continue
+                value_text = DKCParser.normalize_text(container.get_text(" ", strip=True))
+                match = re.search(r"Код\s*[:№]?\s*([A-Za-z0-9][A-Za-z0-9._-]*)", value_text, re.IGNORECASE)
+                if match and len(match.group(1)) >= 3:
+                    return match.group(1)
+        return None
+
+    @staticmethod
+    def extract_etim(soup: BeautifulSoup) -> dict[str, str]:
+        result: dict[str, str] = {}
+        heading = None
+        for tag in soup.find_all(["h2", "h3", "h4", "div", "span"]):
+            text = DKCParser.normalize_text(tag.get_text(" ", strip=True))
+            if text == "Характеристики по стандарту ETIM":
+                heading = tag
+                break
+        if not heading:
+            return result
+
+        container = heading.parent
+        if not container:
+            return result
+        rows = container.find_all("tr")
+        if rows:
+            for row in rows:
+                cells = [DKCParser.normalize_text(c.get_text(" ", strip=True)) for c in row.find_all(["th", "td"])]
+                if len(cells) >= 2 and cells[0] and cells[1]:
+                    result[cells[0]] = cells[1]
+            if result:
+                return result
+
+        for item in container.find_all(["dt", "dd"]):
+            text = DKCParser.normalize_text(item.get_text(" ", strip=True))
+            if not text:
+                continue
+            if item.name == "dt":
+                value = item.find_next_sibling("dd")
+                if value:
+                    result[text] = DKCParser.normalize_text(value.get_text(" ", strip=True))
+        return result
+
+    @staticmethod
+    def extract_image(soup: BeautifulSoup, page_url: str) -> str | None:
+        selectors = [
+            'meta[property="og:image"]',
+            'meta[name="twitter:image"]',
+            'img[itemprop="image"]',
+        ]
+        for selector in selectors:
+            tag = soup.select_one(selector)
+            if tag:
+                value = tag.get("content") or tag.get("src")
+                if value:
+                    return urljoin(page_url, value)
         return None
 
     def parse_product(self, html: str, url: str) -> tuple[dict | None, list[dict]]:
         soup = BeautifulSoup(html, "lxml")
+        if self.is_catalog_page(url):
+            return None, []
         title_tag = soup.find("h1")
         title = self.normalize_text(title_tag.get_text(" ", strip=True)) if title_tag else None
-
         if self.is_assembled_cqe_title(title):
             return None, []
         if self.is_excluded_product(soup, title):
@@ -238,8 +277,11 @@ class DKCParser:
             "source_url": url,
             "name": title,
             "article": article,
-            "characteristics": {},
+            "characteristics": self.extract_etim(soup),
         }
+        image_url = self.extract_image(soup, url)
+        if image_url:
+            product["image_url"] = image_url
         return product, []
 
 
@@ -247,7 +289,6 @@ async def fetch(client: httpx.AsyncClient, limiter: RateLimiter, robots: RobotsP
                 url: str, cfg: Config) -> str:
     if cfg.respect_robots_txt and not await robots.allowed(url):
         raise PermissionError(f"robots.txt does not permit crawling: {url}")
-
     last_error = None
     for attempt in range(cfg.max_retries + 1):
         try:
@@ -290,14 +331,12 @@ async def crawl(cfg: Config) -> None:
                 visited.add(url)
                 state["pages"] = len(visited)
                 catalog_links, _ = parser.parse_links(html, url)
-
                 product, _ = parser.parse_product(html, url)
                 if product is not None:
                     product_urls.add(url)
                     print(f"  PRODUCT: {product['article']} | {product['name']}", flush=True)
                 else:
                     print(f"  category/navigation page | links: {len(catalog_links)}", flush=True)
-
                 for link in sorted(catalog_links):
                     if link not in visited and link not in queue:
                         queue.append(link)
@@ -305,13 +344,11 @@ async def crawl(cfg: Config) -> None:
                 state["errors"] = state.get("errors", 0) + 1
                 append_jsonl(ERRORS_PATH, {"url": url, "stage": "discovery", "error": repr(exc)})
                 print(f"  ERROR: {exc!r}", flush=True)
-
             state["visited"] = sorted(visited)
             state["product_urls"] = sorted(product_urls)
             save_state(state)
 
         print(f"Discovery finished: {len(visited)} pages, {len(product_urls)} eligible product pages, {state.get('errors', 0)} errors", flush=True)
-
         for index, url in enumerate(sorted(product_urls), start=1):
             try:
                 print(f"[PRODUCT {index}/{len(product_urls)}] {url}", flush=True)
@@ -324,7 +361,6 @@ async def crawl(cfg: Config) -> None:
             except Exception as exc:
                 append_jsonl(ERRORS_PATH, {"url": url, "stage": "product", "error": repr(exc)})
                 print(f"  ERROR: {exc!r}", flush=True)
-
     save_state(state)
     print("DKC Loader finished.", flush=True)
 
