@@ -11,7 +11,7 @@ const ros301: EstimateItem = {
   url: 'https://rizur.ru/catalog/prochie-pribory/signalizator-ros-301/',
 }
 
-const API_URL = `http://${window.location.hostname}:3001/api/estimate`
+const API_URL = '/api/estimate'
 
 function App() {
   const [selectedToken, setSelectedToken] = useState<string | null>(null)
