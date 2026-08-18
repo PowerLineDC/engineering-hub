@@ -43,6 +43,18 @@ body { background: #0a0a0a; font-family: -apple-system, BlinkMacSystemFont, 'Seg
 .chint-catalog-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; width: 100%; max-width: 720px; }
 .chint-catalog-grid .manufacturer-catalog-item { min-width: 0; }
 .chint-catalog-grid .manufacturer-folder-button { aspect-ratio: 1 / 1; width: 100%; padding: 14px; display: flex; align-items: center; justify-content: center; }
+.estimate-console { max-width: 1000px; }
+.estimate-item { display: grid; grid-template-columns: 300px 1fr; gap: 40px; align-items: center; padding: 15px 0 5px; }
+.estimate-image-column { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.estimate-product-image { width: 280px; height: 280px; object-fit: contain; background: #0a0a0a; border: 1px solid #2a2a2a; border-radius: 10px; padding: 12px; }
+.estimate-shop-link { color: #8bc34a; text-decoration: none; font-size: 14px; border-bottom: 1px solid #3a3a3a; padding-bottom: 3px; }
+.estimate-shop-link:hover { color: #a5d65a; border-color: #8bc34a; }
+.estimate-product-info { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
+.estimate-product-name { color: #fff; font-size: 30px; font-weight: 600; }
+.estimate-quantity { width: 220px; height: 52px; padding: 10px 14px; background: #0a0a0a; border: 1px solid #3a3a3a; border-radius: 8px; color: #fff; font-size: 22px; }
+.estimate-quantity:focus { outline: none; border-color: #8bc34a; }
+.estimate-save-button { padding: 11px 28px; background: #8bc34a; color: #0a0a0a; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.estimate-save-button:hover { background: #a5d65a; }
 @media (max-width: 600px) {
   .tokens-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 15px; }
   .token-icon { font-size: 28px; } .token-label { font-size: 11px; } .header { padding: 15px; }
@@ -53,4 +65,8 @@ body { background: #0a0a0a; font-family: -apple-system, BlinkMacSystemFont, 'Seg
   .manufacturer-link { padding: 10px 16px; font-size: 12px; } .manufacturer-folder-button { padding: 10px 16px; font-size: 12px; }
   .chint-catalog-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
   .chint-catalog-grid .manufacturer-folder-button { padding: 8px; font-size: 11px; }
+  .estimate-item { grid-template-columns: 1fr; gap: 25px; }
+  .estimate-product-image { width: 220px; height: 220px; }
+  .estimate-product-info { width: 100%; align-items: center; }
+  .estimate-product-name { font-size: 24px; }
 }
