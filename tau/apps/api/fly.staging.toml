@@ -1,0 +1,55 @@
+# fly.toml app configuration file for staging environment (api.taucad.dev)
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'tau-api-staging'
+primary_region = 'syd'
+kill_signal = 'SIGTERM'
+kill_timeout = '30s'
+
+[build]
+dockerfile = 'Dockerfile'
+
+[env]
+NODE_ENV = 'production'
+TAU_FRONTEND_URL = 'https://taucad.dev'
+LANGSMITH_TRACING = true
+LANGSMITH_ENDPOINT = 'https://api.smith.langchain.com'
+LANGSMITH_PROJECT = 'tau-api-staging'
+AUTH_URL = 'https://api.taucad.dev'
+LOG_SERVICE = 'fly'
+LOG_LEVEL = 'info'
+OTEL_METRICS_PORT = '9464'
+OTEL_EXPORTER_OTLP_COMPRESSION = 'gzip'
+# Additional CORS origins for the Netlify-hosted UI:
+#   - https://deploy-preview-*--taucad.netlify.app : per-PR Netlify deploy previews
+#   - https://taucad.netlify.app                   : Netlify default domain for the `taucad` site
+# The narrow `deploy-preview-*` glob is intentional — do not broaden to `*--taucad.netlify.app`,
+# which would silently allow non-PR branch deploys (currently disabled per allowed_branches).
+ADDITIONAL_CORS_ORIGINS = '["https://deploy-preview-*--taucad.netlify.app","https://taucad.netlify.app"]'
+
+[http_service]
+internal_port = 3000
+force_https = true
+auto_stop_machines = 'stop'
+auto_start_machines = true
+min_machines_running = 1
+processes = ['app']
+
+[[http_service.checks]]
+interval = "10s"
+grace_period = "30s"
+method = "GET"
+path = "/health/ready"
+timeout = "2s"
+
+[metrics]
+port = 9464
+path = "/metrics"
+
+[[vm]]
+memory = '1gb'
+cpu_kind = 'shared'
+cpus = 1
+

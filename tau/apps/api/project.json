@@ -1,0 +1,102 @@
+{
+  "name": "api",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/api",
+  "projectType": "application",
+  "tags": ["scope:api", "type:app"],
+  "targets": {
+    "setup-env": {
+      "command": "if [ ! -f \"./apps/api/.env\" ]; then cp ./apps/api/.env.example ./apps/api/.env; fi"
+    },
+    "deploy": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "fly deploy --config ./apps/api/fly.staging.toml --dockerfile ./apps/api/Dockerfile"
+      }
+    },
+    "deploy:prod": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "fly deploy --config ./apps/api/fly.prod.toml --dockerfile ./apps/api/Dockerfile"
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "continuous": true,
+      "defaultConfiguration": "development",
+      "options": {
+        "buildTarget": "api:build"
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "api:build:development"
+        },
+        "production": {
+          "buildTarget": "api:build:production"
+        }
+      },
+      "parallelism": true
+    },
+    "auth-schema-generate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx auth@latest generate --config app/config/auth.ts --output app/database/auth-schema.ts --yes",
+        "cwd": "{projectRoot}"
+      }
+    },
+    "launch": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "fly launch --config ./apps/api/fly.prod.toml"
+      }
+    },
+    "db-generate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "drizzle-kit generate",
+        "cwd": "{projectRoot}"
+      }
+    },
+    "db-migrate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "drizzle-kit migrate",
+        "cwd": "{projectRoot}"
+      }
+    },
+    "db-studio": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "drizzle-kit studio",
+        "cwd": "{projectRoot}"
+      }
+    },
+    "db-push": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "drizzle-kit push",
+        "cwd": "{projectRoot}"
+      }
+    },
+    "test:models": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run --config vitest.integration.config.ts",
+        "cwd": "{projectRoot}"
+      }
+    },
+    "benchmark:models": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node --import @oxc-node/core/register --import ./scripts/raw-loader.mts scripts/benchmark-models.mts",
+        "cwd": "{projectRoot}"
+      }
+    },
+    "grafana:sync": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "bash apps/api/scripts/sync-grafana-dashboards.sh"
+      }
+    }
+  }
+}

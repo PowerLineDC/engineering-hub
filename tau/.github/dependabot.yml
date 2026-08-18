@@ -1,0 +1,124 @@
+version: 2
+updates:
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
+    open-pull-requests-limit: 10
+    versioning-strategy: 'increase'
+    commit-message:
+      prefix: 'chore'
+      include: 'scope'
+    labels:
+      - 'dependencies'
+      - 'automated'
+    groups:
+      patch-updates:
+        patterns:
+          - '*'
+        update-types:
+          - 'patch'
+      nx:
+        patterns:
+          - '*nx*'
+        update-types:
+          - 'minor'
+          - 'patch'
+      react:
+        patterns:
+          - '*react*'
+        update-types:
+          - 'minor'
+          - 'patch'
+      testing:
+        patterns:
+          - '*vitest*'
+          - '*playwright*'
+        update-types:
+          - 'minor'
+          - 'patch'
+      eslint:
+        patterns:
+          - '*eslint*'
+        update-types:
+          - 'minor'
+          - 'patch'
+
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '10:00'
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'ci'
+      include: 'scope'
+    labels:
+      - 'github-actions'
+      - 'ci'
+      - 'automated'
+
+  - package-ecosystem: 'docker'
+    directory: '/apps/api'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '11:00'
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'chore(docker)'
+      include: 'scope'
+    labels:
+      - 'dependencies'
+      - 'docker'
+      - 'automated'
+
+  - package-ecosystem: 'docker'
+    directory: '/apps/ui'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '11:00'
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'chore(docker)'
+      include: 'scope'
+    labels:
+      - 'dependencies'
+      - 'docker'
+      - 'automated'
+
+  - package-ecosystem: 'docker'
+    directory: '/infra'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '11:00'
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'chore(infra)'
+      include: 'scope'
+    labels:
+      - 'dependencies'
+      - 'docker'
+      - 'infrastructure'
+      - 'automated'
+
+  - package-ecosystem: 'docker'
+    directory: '/docker/search'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '11:00'
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'chore(search)'
+      include: 'scope'
+    labels:
+      - 'dependencies'
+      - 'docker'
+      - 'search'
+      - 'automated'

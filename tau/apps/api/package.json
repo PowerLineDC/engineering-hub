@@ -1,0 +1,34 @@
+{
+  "name": "@taucad/api",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@aws-sdk/client-s3": "catalog:",
+    "@aws-sdk/lib-storage": "catalog:",
+    "@aws-sdk/s3-request-presigner": "catalog:",
+    "@fastify/multipart": "catalog:",
+    "@pyroscope/nodejs": "catalog:",
+    "@taucad/api-extractor": "workspace:*",
+    "@taucad/chat": "workspace:*",
+    "@taucad/openscad": "workspace:*",
+    "@taucad/runtime": "workspace:*",
+    "@taucad/tau-examples": "workspace:*",
+    "@taucad/telemetry": "workspace:*",
+    "@taucad/testing": "workspace:*",
+    "@taucad/types": "workspace:*",
+    "@taucad/utils": "workspace:*",
+    "react": "catalog:",
+    "react-email": "catalog:",
+    "resend": "catalog:"
+  },
+  "devDependencies": {
+    "@taucad/vite": "workspace:*"
+  },
+  "imports": {
+    "#*": "./app/*"
+  },
+  "files": [
+    "dist"
+  ]
+}

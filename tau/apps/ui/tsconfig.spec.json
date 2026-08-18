@@ -1,0 +1,39 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["DOM", "DOM.Iterable", "ES2024"],
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2024",
+    "paths": {
+      "package.json": ["./package.json"],
+      "#*": ["./app/*"],
+      "fumadocs-mdx:collections/*": ["./.source/*"]
+    },
+    "outDir": "./out-tsc/spec",
+    "rootDirs": [".", "./.react-router/types"],
+    "types": ["vitest/importMeta", "vite/client", "node", "vitest"]
+  },
+  "include": [
+    "vite.config.ts",
+    "vitest.config.ts",
+    "vitest.setup.ts",
+    "react-router.config.ts",
+    "./.react-router/types/**/*",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "app/**/*.js",
+    "app/**/*.jsx",
+    "tests/**/*.spec.ts",
+    "tests/**/*.test.ts",
+    "tests/**/*.spec.tsx",
+    "tests/**/*.test.tsx",
+    "server.ts",
+    "server.test.ts",
+    "scripts/**/*.ts",
+    "vite-environment.d.ts",
+    ".source/**/*", // Fumadocs collections
+    "package.json"
+  ]
+}

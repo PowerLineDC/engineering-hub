@@ -1,0 +1,15 @@
+{
+  "name": "@taucad/tau-examples",
+  "version": "0.1.0",
+  "description": "Tau examples",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./fixtures": "./src/fixture-loader.ts",
+    "./manifest": "./src/manifest.ts"
+  },
+  "imports": {
+    "#*": "./src/*"
+  }
+}

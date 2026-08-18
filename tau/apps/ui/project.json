@@ -1,0 +1,88 @@
+{
+  "name": "ui",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/ui",
+  "projectType": "application",
+  "tags": ["scope:ui", "type:app"],
+  "targets": {
+    "build": {
+      "dependsOn": ["copy-assets", "^copy-assets"],
+      "outputs": ["{projectRoot}/build"],
+      "command": "react-router build --sourcemapClient hidden",
+      "options": {
+        "cwd": "{projectRoot}",
+        "env": {
+          "NODE_OPTIONS": "--max-old-space-size=8192"
+        }
+      }
+    },
+    "size": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "cache": true,
+      "inputs": ["{projectRoot}/build/server/**", "{projectRoot}/scripts/check-ssr-bundle-budget.mts"],
+      "outputs": [],
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "node --import @oxc-node/core/register scripts/check-ssr-bundle-budget.mts"
+      }
+    },
+    "bootstrap-https-certs": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/scripts/bootstrap-https-certs.ts",
+        "{projectRoot}/app/lib/certificates/https-certs-path.ts",
+        "{projectRoot}/app/lib/certificates/mkcert-cache-writable.ts",
+        {
+          "runtime": "node {workspaceRoot}/tools/runtime-lan-ips.mjs"
+        }
+      ],
+      "outputs": ["{workspaceRoot}/node_modules/.cache/vite-plugin-mkcert"],
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "node --import @oxc-node/core/register scripts/bootstrap-https-certs.ts",
+        "env": {
+          "MKCERT_TRUST_INSTALL": "false"
+        }
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "continuous": true,
+      "dependsOn": ["build"],
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "node --env-file-if-exists=.env --import @oxc-node/core/register server.ts",
+        "env": {
+          "NODE_ENV": "production"
+        }
+      },
+      "configurations": {},
+      "parallelism": true
+    },
+    "typegen": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["{projectRoot}/app/**/*.tsx", "{projectRoot}/app/**/*.ts", "{projectRoot}/react-router.config.ts"],
+      "outputs": ["{projectRoot}/.react-router/types/**"],
+      "options": {
+        "command": "react-router typegen",
+        "cwd": "{projectRoot}"
+      }
+    },
+    "typecheck": {
+      "dependsOn": ["typegen"]
+    },
+    "sourcemaps": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "npx -y @posthog/cli sourcemap inject --directory {projectRoot}/build/client --project tau-ui",
+          "npx -y @posthog/cli sourcemap upload --directory {projectRoot}/build/client --delete-after"
+        ],
+        "parallel": false
+      }
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "types": ["node"],
+    "target": "ESNext",
+    "outDir": "./out-tsc/lib",
+    "paths": {
+      "#*": ["./app/*"]
+    },
+    "erasableSyntaxOnly": false // Incompatible with NestJS dependency injection.
+  },
+  "include": ["app/**/*.ts"],
+  "exclude": ["app/**/*.spec.ts", "app/**/*.test.ts"]
+}

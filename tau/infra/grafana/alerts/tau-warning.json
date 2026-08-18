@@ -1,0 +1,157 @@
+{
+  "title": "tau-warning",
+  "interval": 60,
+  "rules": [
+    {
+      "uid": "rpc-failure-rate",
+      "title": "P1: RPC Failure Rate Spike",
+      "condition": "rpc_errors_high",
+      "data": [
+        {
+          "refId": "rpc_errors_high",
+          "queryType": "",
+          "relativeTimeRange": { "from": 300, "to": 0 },
+          "datasourceUid": "prometheus",
+          "model": {
+            "expr": "sum(rate(rpc_server_call_duration_count{service_name=\"tau-api\",rpc_status=\"error\"}[5m])) / sum(rate(rpc_server_call_duration_count{service_name=\"tau-api\"}[5m])) > 0.1",
+            "intervalMs": 15000,
+            "maxDataPoints": 20,
+            "refId": "rpc_errors_high"
+          }
+        }
+      ],
+      "noDataState": "OK",
+      "execErrState": "OK",
+      "for": "5m",
+      "annotations": {
+        "summary": "RPC error rate exceeds 10% over 5 minutes."
+      },
+      "labels": {
+        "severity": "warning",
+        "service": "tau-api",
+        "component": "rpc"
+      }
+    },
+    {
+      "uid": "ws-disconnect-storm",
+      "title": "P1: WebSocket Disconnect Storm",
+      "condition": "ws_disconnect_spike",
+      "data": [
+        {
+          "refId": "ws_disconnect_spike",
+          "queryType": "",
+          "relativeTimeRange": { "from": 300, "to": 0 },
+          "datasourceUid": "prometheus",
+          "model": {
+            "expr": "rate(ws_disconnections_total{service_name=\"tau-api\",ws_close_reason=~\"transport close|transport error|ping timeout\"}[5m]) > 1",
+            "intervalMs": 15000,
+            "maxDataPoints": 20,
+            "refId": "ws_disconnect_spike"
+          }
+        }
+      ],
+      "noDataState": "OK",
+      "execErrState": "OK",
+      "for": "2m",
+      "annotations": {
+        "summary": "High rate of abnormal WebSocket disconnections detected."
+      },
+      "labels": {
+        "severity": "warning",
+        "service": "tau-api",
+        "component": "websocket"
+      }
+    },
+    {
+      "uid": "llm-error-rate",
+      "title": "P1: LLM API Error Rate",
+      "condition": "llm_errors",
+      "data": [
+        {
+          "refId": "llm_errors",
+          "queryType": "",
+          "relativeTimeRange": { "from": 600, "to": 0 },
+          "datasourceUid": "prometheus",
+          "model": {
+            "expr": "sum(rate(gen_ai_client_operation_duration_count{service_name=\"tau-api\",error_type!=\"\"}[10m])) / sum(rate(gen_ai_client_operation_duration_count{service_name=\"tau-api\"}[10m])) > 0.05",
+            "intervalMs": 15000,
+            "maxDataPoints": 20,
+            "refId": "llm_errors"
+          }
+        }
+      ],
+      "noDataState": "OK",
+      "execErrState": "OK",
+      "for": "5m",
+      "annotations": {
+        "summary": "LLM API error rate exceeds 5%."
+      },
+      "labels": {
+        "severity": "warning",
+        "service": "tau-api",
+        "component": "ai"
+      }
+    },
+    {
+      "uid": "high-5xx-rate",
+      "title": "P1: High 5xx Error Rate",
+      "condition": "http_5xx_high",
+      "data": [
+        {
+          "refId": "http_5xx_high",
+          "queryType": "",
+          "relativeTimeRange": { "from": 300, "to": 0 },
+          "datasourceUid": "prometheus",
+          "model": {
+            "expr": "sum(rate(http_server_duration_count{service_name=\"tau-api\",http_status_code=~\"5..\"}[5m])) / sum(rate(http_server_duration_count{service_name=\"tau-api\"}[5m])) > 0.05",
+            "intervalMs": 15000,
+            "maxDataPoints": 20,
+            "refId": "http_5xx_high"
+          }
+        }
+      ],
+      "noDataState": "OK",
+      "execErrState": "OK",
+      "for": "5m",
+      "annotations": {
+        "summary": "HTTP 5xx error rate exceeds 5% over 5 minutes."
+      },
+      "labels": {
+        "severity": "warning",
+        "service": "tau-api",
+        "component": "api"
+      }
+    },
+    {
+      "uid": "gen-ai-prompt-cache-hit-rate-low",
+      "title": "GenAiPromptCacheHitRateLow: Prompt cache hit rate below 40% (cost bleed)",
+      "condition": "cache_hit_rate_low",
+      "data": [
+        {
+          "refId": "cache_hit_rate_low",
+          "queryType": "",
+          "relativeTimeRange": { "from": 1800, "to": 0 },
+          "datasourceUid": "prometheus",
+          "model": {
+            "expr": "(\n  sum by (gen_ai_request_model, gen_ai_provider_name) (rate(gen_ai_client_token_usage_sum{service_name=\"tau-api\", gen_ai_token_type=\"cache_read\"}[30m]))\n  /\n  (\n    sum by (gen_ai_request_model, gen_ai_provider_name) (rate(gen_ai_client_token_usage_sum{service_name=\"tau-api\", gen_ai_token_type=\"cache_read\"}[30m]))\n    +\n    sum by (gen_ai_request_model, gen_ai_provider_name) (rate(gen_ai_client_token_usage_sum{service_name=\"tau-api\", gen_ai_token_type=\"input\"}[30m]))\n  )\n) < 0.4\nand\nsum by (gen_ai_request_model, gen_ai_provider_name) (increase(gen_ai_client_token_usage_sum{service_name=\"tau-api\", gen_ai_token_type=\"input\"}[30m])) >= 200000",
+            "intervalMs": 15000,
+            "maxDataPoints": 20,
+            "refId": "cache_hit_rate_low"
+          }
+        }
+      ],
+      "noDataState": "OK",
+      "execErrState": "OK",
+      "for": "30m",
+      "annotations": {
+        "summary": "Prompt cache hit rate <40% sustained for 30m on a model with non-trivial volume.",
+        "description": "Provider-side prompt caches (Gemini implicit, Anthropic incremental, OpenAI prompt) are not hitting on {{ $labels.gen_ai_provider_name }}/{{ $labels.gen_ai_request_model }} despite >=200K input tokens billed in the last 30m. This is a cost-bleed signal, not a user-facing failure. Common causes: per-turn-mutating prefix bytes (token-usage reminders, dynamic system-prompt fields), tool-list churn, or LangChain integration regressions. See docs/research/gemini-prompt-cache-busting.md for the diagnosis playbook."
+      },
+      "labels": {
+        "severity": "warning",
+        "service": "tau-api",
+        "component": "ai"
+      }
+    }
+  ]
+}

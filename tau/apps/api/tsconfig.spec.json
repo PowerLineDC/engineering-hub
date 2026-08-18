@@ -1,0 +1,28 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "target": "ESNext",
+    "outDir": "./out-tsc/spec",
+    "erasableSyntaxOnly": false, // Incompatible with NestJS dependency injection.
+    "types": ["node", "vitest/importMeta", "vite-plugin-node", "vitest"],
+    "paths": {
+      "#*": ["./app/*"]
+    }
+  },
+  "include": [
+    "vite.config.ts",
+    "vitest.setup.ts",
+    "vitest.integration.config.ts",
+    "drizzle.config.ts",
+    "scripts/**/*.mts",
+    "app/**/*.test.ts",
+    "app/**/*.spec.ts",
+    "app/**/*.test-d.ts",
+    "app/**/*.d.ts",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "app/**/*.js",
+    "app/**/*.jsx"
+  ]
+}

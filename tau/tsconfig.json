@@ -1,0 +1,59 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./out-tsc"
+  },
+  "references": [
+    {
+      "path": "./apps/ui"
+    },
+    {
+      "path": "./apps/api"
+    },
+    {
+      "path": "./packages/converter"
+    },
+    {
+      "path": "./libs/tau-examples"
+    },
+    {
+      "path": "./apps/api-e2e"
+    },
+    {
+      "path": "./apps/ui-e2e"
+    },
+    {
+      "path": "./libs/api-extractor"
+    },
+    {
+      "path": "./packages/types"
+    },
+    {
+      "path": "./packages/json-schema"
+    },
+    {
+      "path": "./packages/js"
+    },
+    {
+      "path": "./packages/runtime"
+    },
+    {
+      "path": "./packages/units"
+    },
+    {
+      "path": "./libs/billing"
+    },
+    {
+      "path": "./libs/chat"
+    },
+    {
+      "path": "./packages/utils"
+    },
+    {
+      "path": "./libs/vite"
+    }
+  ],
+  "files": [],
+  "include": ["vitest.workspace.ts", "eslint.config.mjs", "scripts/**/*", "tools/**/*"],
+  "exclude": ["node_modules", "tmp"]
+}

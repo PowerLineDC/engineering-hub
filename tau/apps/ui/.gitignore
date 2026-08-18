@@ -1,0 +1,13 @@
+# Build
+build
+dist
+
+# Public
+public/build
+public/entry.worker.js
+
+# React Router
+.react-router
+
+# Local Netlify folder
+.netlify
