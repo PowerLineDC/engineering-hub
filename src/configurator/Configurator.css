@@ -1,0 +1,29 @@
+.configurator-overlay { position: fixed; inset: 0; z-index: 3000; background: #080808; }
+.configurator { width: 100%; height: 100%; display: flex; flex-direction: column; color: #fff; background: #101010; }
+.configurator-header { min-height: 82px; padding: 16px 22px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #2a2a2a; background: #181818; }
+.configurator-kicker { color: #8bc34a; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 5px; }
+.configurator-header h2 { margin: 0; font-size: 22px; font-weight: 600; }
+.configurator-header p { margin: 4px 0 0; color: #777; font-size: 12px; }
+.configurator-close { border: 0; background: transparent; color: #777; font-size: 25px; cursor: pointer; padding: 6px 10px; }
+.configurator-close:hover { color: #fff; }
+.configurator-body { min-height: 0; flex: 1; display: grid; grid-template-columns: 270px minmax(0, 1fr); }
+.configurator-panel { overflow-y: auto; padding: 20px; border-right: 1px solid #2a2a2a; background: #151515; }
+.configurator-panel section { padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid #292929; }
+.configurator-panel h3 { margin: 0 0 14px; color: #8bc34a; font-size: 14px; font-weight: 600; }
+.configurator-panel label { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; color: #aaa; font-size: 12px; }
+.configurator-panel input { width: 100%; padding: 10px 11px; border: 1px solid #363636; border-radius: 7px; background: #0d0d0d; color: #fff; font: inherit; }
+.configurator-panel input:focus { outline: none; border-color: #8bc34a; }
+.configurator-status { display: flex; flex-direction: column; gap: 12px; }
+.configurator-status div { display: flex; flex-direction: column; gap: 3px; }
+.configurator-status span { color: #666; font-size: 10px; text-transform: uppercase; }
+.configurator-status strong { color: #ccc; font-size: 12px; font-weight: 500; }
+.configurator-view { position: relative; min-width: 0; min-height: 0; background: #101010; }
+.cad-scene { position: absolute; inset: 0; }
+.cad-hint { position: absolute; left: 16px; bottom: 14px; padding: 7px 10px; border: 1px solid #303030; border-radius: 6px; background: rgba(15,15,15,.85); color: #777; font-size: 11px; pointer-events: none; }
+@media (max-width: 700px) {
+  .configurator-body { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .configurator-panel { max-height: 270px; border-right: 0; border-bottom: 1px solid #2a2a2a; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; padding: 14px; }
+  .configurator-panel section { margin: 0; padding: 0 0 12px; border: 0; }
+  .configurator-status { grid-column: 1 / -1; }
+  .configurator-view { min-height: 420px; }
+}
