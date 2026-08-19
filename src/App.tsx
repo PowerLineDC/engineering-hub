@@ -1,27 +1,14 @@
+import { useState } from 'react'
 import './App.css'
 
 function App() {
-  return (
-    <div className="app-container">
-      <header className="header">
-        <div className="header-top">
-          <h1 className="logo">Engineering Hub</h1>
-          <button className="auth-btn">Войти</button>
-        </div>
-        <div className="search-container">
-          <input type="text" className="search-input" placeholder="Поиск..." />
-          <span className="search-icon">🔍</span>
-        </div>
-      </header>
+  const [count, setCount] = useState(0)
 
-      <main className="tokens-container">
-        <div className="tokens-grid">
-          <div className="token">
-            <div className="token-icon">⚙️</div>
-            <div className="token-label">DIAGNOSTIC: App без hooks</div>
-          </div>
-        </div>
-      </main>
+  return (
+    <div style={{ padding: '24px', color: '#fff', background: '#101010', minHeight: '100vh' }}>
+      <button onClick={() => setCount(count + 1)}>
+        useState работает: {count}
+      </button>
     </div>
   )
 }
