@@ -4,7 +4,6 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { importSTEP } from 'replicad'
 import initOpenCascade from 'replicad-opencascadejs'
 import { setOC } from 'replicad'
-import replicadWasm from 'replicad-opencascadejs/src/replicad_single.wasm?url'
 
 type CadSceneProps = {
   width: number
@@ -19,7 +18,7 @@ let cadReady: Promise<void> | null = null
 
 function initCad() {
   if (!cadReady) {
-    cadReady = initOpenCascade({ locateFile: () => replicadWasm }).then((oc) => {
+    cadReady = initOpenCascade().then((oc) => {
       console.log('[CAD] OpenCascade initialized')
       setOC(oc)
     })
