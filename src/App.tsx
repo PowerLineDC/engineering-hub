@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import './App.css'
+import { Configurator } from './configurator/Configurator'
 
 type Manufacturer = { id: string; logo: string; url: string }
 
@@ -9,6 +10,7 @@ function App() {
   const [selectedManufacturer, setSelectedManufacturer] = useState<string | null>(null)
   const [selectedChintFolder, setSelectedChintFolder] = useState<string | null>(null)
   const [isPanelAssemblyOpen, setIsPanelAssemblyOpen] = useState(false)
+  const [isConfiguratorOpen, setIsConfiguratorOpen] = useState(false)
 
   const tokens = [
     { id: 'Производители', icon: '🏭' },
@@ -80,6 +82,10 @@ function App() {
     setSelectedChintFolder(null)
   }
 
+  if (isConfiguratorOpen) {
+    return <Configurator onClose={() => setIsConfiguratorOpen(false)} />
+  }
+
   return (
     <div className="app-container">
       <header className="header">
@@ -124,7 +130,7 @@ function App() {
             </div>
             <div className="modal-body">
               <div className="manufacturer-folders">
-                <button className="manufacturer-folder-button" onClick={() => setSelectedToken('Конфигуратор НКУ')}>
+                <button className="manufacturer-folder-button" onClick={() => setIsConfiguratorOpen(true)}>
                   ⚙️ Конфигуратор НКУ
                 </button>
               </div>
