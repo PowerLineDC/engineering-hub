@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { makeBaseBox, makeCompound } from 'replicad'
+import { makeBaseBox } from 'replicad'
 import initOpenCascade from 'replicad-opencascadejs'
 import { setOC } from 'replicad'
 import replicadWasm from 'replicad-opencascadejs/src/replicad_single.wasm?url'
@@ -29,7 +29,7 @@ function initCad() {
 function makeCabinet(width: number, height: number, depth: number, railCount: number) {
   const wall = 2
   const back = makeBaseBox(width, height, wall)
-  const left = makeBaseBox(wall, height, depth).translate([0, 0, 0])
+  const left = makeBaseBox(wall, height, depth)
   const right = makeBaseBox(wall, height, depth).translate([width - wall, 0, 0])
   const top = makeBaseBox(width, wall, depth).translate([0, height - wall, 0])
   const bottom = makeBaseBox(width, wall, depth)
@@ -55,8 +55,7 @@ function addReplicadShape(scene: THREE.Scene, shape: CadShape, material: THREE.M
   geometry.computeBoundingSphere()
 
   const object = new THREE.Mesh(geometry, material)
-  object.rotation.x = -Math.PI / 2
-  object.scale.set(0.01, 0.01, 0.01)
+  object.scale.setScalar(0.01)
   scene.add(object)
   return object
 }
@@ -82,7 +81,6 @@ export function CadScene({ width, height, depth, railCount }: CadSceneProps) {
 
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
-    controls.target.set(0, 0, 2.5)
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 2))
     const directional = new THREE.DirectionalLight(0xffffff, 2)
@@ -107,14 +105,14 @@ export function CadScene({ width, height, depth, railCount }: CadSceneProps) {
 
         const largest = Math.max(width, height, depth) / 100
         camera.position.set(largest * 1.8, largest * 1.4, largest * 1.8)
-        controls.target.set(0, height / 200, depth / 200)
+        controls.target.set((width / 100) / 2, (height / 100) / 2, (depth / 100) / 2)
+        controls.update()
       })
       .catch((error) => {
         console.error('Tau/Replicad CAD initialization failed', error)
       })
 
     const resize = () => {
-      if (!container) return
       const aspect = container.clientWidth / Math.max(container.clientHeight, 1)
       camera.aspect = aspect
       camera.updateProjectionMatrix()
