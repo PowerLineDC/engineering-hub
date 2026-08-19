@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { importSTEP } from 'replicad'
 import initOpenCascade from 'replicad-opencascadejs'
 import { setOC } from 'replicad'
@@ -34,26 +33,6 @@ async function loadStepModel(url: string): Promise<CadShape> {
 
   const blob = await response.blob()
   return importSTEP(blob)
-}
-
-function makeCabinet(width: number, height: number, depth: number, railCount: number) {
-  const wall = 2
-  const back = makeBaseBox(width, height, wall)
-  const left = makeBaseBox(wall, height, depth)
-  const right = makeBaseBox(wall, height, depth).translate([width - wall, 0, 0])
-  const top = makeBaseBox(width, wall, depth).translate([0, height - wall, 0])
-  const bottom = makeBaseBox(width, wall, depth)
-  const plate = makeBaseBox(width - 40, height - 40, 2).translate([20, 20, depth - 35])
-
-  const railLength = width - 80
-  const railHeight = 35
-  const railDepth = 7.5
-  const railShapes = Array.from({ length: railCount }, (_, index) => {
-    const y = 45 + index * ((height - 90 - railHeight) / Math.max(1, railCount - 1))
-    return makeBaseBox(railLength, railDepth, railHeight).translate([40, y, depth - 55])
-  })
-
-  return [back, left, right, top, bottom, plate, ...railShapes]
 }
 
 function addReplicadShape(scene: THREE.Scene, shape: CadShape, material: THREE.Material) {
@@ -97,12 +76,9 @@ export function CadScene({ width, height, depth, railCount }: CadSceneProps) {
     directional.position.set(5, 10, 7)
     scene.add(directional)
 
-    const grid = new THREE.GridHelper(12, 24, 0x444444, 0x222222)
-    scene.add(grid)
+    scene.add(new THREE.GridHelper(12, 24, 0x444444, 0x222222))
 
     const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x777777, metalness: 0.5, roughness: 0.45 })
-    const plateMaterial = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.35, roughness: 0.55 })
-    const railMaterial = new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.8, roughness: 0.25 })
 
     initCad()
       .then(async () => {
