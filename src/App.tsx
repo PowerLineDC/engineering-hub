@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import './App.css'
-import { Configurator } from './configurator/Configurator'
+
+const Configurator = lazy(() => import('./configurator/Configurator').then((module) => ({ default: module.Configurator })))
 
 type Manufacturer = { id: string; logo: string; url: string }
 
@@ -46,7 +47,7 @@ function App() {
     { name: 'оборудование для защиты и управления двигателем', url: 'https://ensmas.ru/catalog/oborudovanie_nizkogo_napryazheniya/oborudovanie_dlya_zashchity_i_upravleniya_dvigatelem/' },
     { name: 'оборудование сигнализации и управления', url: 'https://ensmas.ru/catalog/oborudovanie_nizkogo_napryazheniya/oborudovanie_signalizatsii_i_upravleniya_/' },
     { name: 'измерительные приборы', url: 'https://ensmas.ru/catalog/oborudovanie_nizkogo_napryazheniya/izmeritelnye_pribory/' },
-    { name: 'оборудование для компенсации реактивной мощности', url: 'https://ensmas.ru/catalog/oborudovanie_nizkogo_napryazheniya/oborudovanie_dlya_kompensatsii_reaktivnoy_moshchnosti/' },
+    { name: 'оборудование для компенсации реактивной мощности', url: 'https://ensmas.ru/atalog/oborudovanie_nizkogo_napryazheniya/oborudovanie_dlya_kompensatsii_reaktivnoy_moshchnosti/' },
     { name: 'шкафы и аксессуары', url: 'https://ensmas.ru/catalog/oborudovanie_nizkogo_napryazheniya/shkafy_i_aksessuary/' },
     { name: 'ретрофит решения низкого напряжения', url: 'https://ensmas.ru/catalog/oborudovanie_nizkogo_napryazheniya/retrofit_resheniya_nizkogo_napryazheniya/' },
   ]
@@ -83,7 +84,11 @@ function App() {
   }
 
   if (isConfiguratorOpen) {
-    return <Configurator onClose={() => setIsConfiguratorOpen(false)} />
+    return (
+      <Suspense fallback={<div style={{ padding: '24px', color: '#fff', background: '#101010', minHeight: '100vh' }}>Загрузка конфигуратора…</div>}>
+        <Configurator onClose={() => setIsConfiguratorOpen(false)} />
+      </Suspense>
+    )
   }
 
   return (
@@ -102,11 +107,7 @@ function App() {
       <main className="tokens-container">
         <div className="tokens-grid">
           {tokens.map((token) => (
-            <div
-              key={token.id}
-              className={`token ${selectedToken === token.id ? 'token-active' : ''}`}
-              onClick={() => handleTokenClick(token.id)}
-            >
+            <div key={token.id} className={`token ${selectedToken === token.id ? 'token-active' : ''}`} onClick={() => handleTokenClick(token.id)}>
               <div className="token-icon">{token.icon}</div>
               <div className="token-label">{token.id}</div>
               {selectedToken === token.id && <div className="token-popup">Выбрана папка: {token.id}</div>}
@@ -130,9 +131,7 @@ function App() {
             </div>
             <div className="modal-body">
               <div className="manufacturer-folders">
-                <button className="manufacturer-folder-button" onClick={() => setIsConfiguratorOpen(true)}>
-                  ⚙️ Конфигуратор НКУ
-                </button>
+                <button className="manufacturer-folder-button" onClick={() => setIsConfiguratorOpen(true)}>⚙️ Конфигуратор НКУ</button>
               </div>
             </div>
           </div>
@@ -186,9 +185,7 @@ function App() {
                 <div className="manufacturer-detail">
                   <img src={manufacturers.find((m) => m.id === selectedManufacturer)?.logo} alt={selectedManufacturer} className="manufacturer-detail-logo" />
                   <h3 className="manufacturer-detail-name">{selectedManufacturer}</h3>
-                  <a href={manufacturers.find((m) => m.id === selectedManufacturer)?.url} target="_blank" rel="noopener noreferrer" className="manufacturer-link" onClick={(e) => e.stopPropagation()}>
-                    {manufacturers.find((m) => m.id === selectedManufacturer)?.url}
-                  </a>
+                  <a href={manufacturers.find((m) => m.id === selectedManufacturer)?.url} target="_blank" rel="noopener noreferrer" className="manufacturer-link" onClick={(e) => e.stopPropagation()}>{manufacturers.find((m) => m.id === selectedManufacturer)?.url}</a>
                   {selectedManufacturer === 'CHINT' && (
                     <div className="manufacturer-folders">
                       <button className="manufacturer-folder-button" onClick={() => setSelectedChintFolder('Серия')}>Серия</button>
@@ -204,9 +201,7 @@ function App() {
       )}
 
       {selectedToken === 'Конфигуратор НКУ' && (
-        <div className="token-popup" style={{ position: 'fixed', bottom: '80px', left: '50%', zIndex: 2000 }}>
-          Конфигуратор НКУ пока готовится
-        </div>
+        <div className="token-popup" style={{ position: 'fixed', bottom: '80px', left: '50%', zIndex: 2000 }}>Конфигуратор НКУ пока готовится</div>
       )}
     </div>
   )
