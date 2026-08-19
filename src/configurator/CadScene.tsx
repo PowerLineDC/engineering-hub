@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { makeBaseBox } from 'replicad'
+import { importSTEP } from 'replicad'
 import initOpenCascade from 'replicad-opencascadejs'
 import { setOC } from 'replicad'
 import replicadWasm from 'replicad-opencascadejs/src/replicad_single.wasm?url'
@@ -13,7 +13,7 @@ type CadSceneProps = {
   railCount: number
 }
 
-type CadShape = ReturnType<typeof makeBaseBox>
+type CadShape = Awaited<ReturnType<typeof importSTEP>>
 
 let cadReady: Promise<void> | null = null
 
@@ -24,6 +24,16 @@ function initCad() {
     })
   }
   return cadReady
+}
+
+async function loadStepModel(url: string): Promise<CadShape> {
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`STEP download failed: ${response.status} ${response.statusText}`)
+  }
+
+  const blob = await response.blob()
+  return importSTEP(blob)
 }
 
 function makeCabinet(width: number, height: number, depth: number, railCount: number) {
@@ -95,21 +105,21 @@ export function CadScene({ width, height, depth, railCount }: CadSceneProps) {
     const railMaterial = new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.8, roughness: 0.25 })
 
     initCad()
-      .then(() => {
+      .then(async () => {
         if (disposed) return
-        const shapes = makeCabinet(width, height, depth, railCount)
-        shapes.forEach((shape, index) => {
-          const material = index === 5 ? plateMaterial : index >= 6 ? railMaterial : frameMaterial
-          addReplicadShape(scene, shape, material)
-        })
+
+        const shape = await loadStepModel('/cad/Osnovnyye_elementy_korpusa_CQE_N/R5NBP02B.STEP')
+        if (disposed) return
+
+        addReplicadShape(scene, shape, frameMaterial)
 
         const largest = Math.max(width, height, depth) / 100
         camera.position.set(largest * 1.8, largest * 1.4, largest * 1.8)
-        controls.target.set((width / 100) / 2, (height / 100) / 2, (depth / 100) / 2)
+        controls.target.set(0, 0, 0)
         controls.update()
       })
       .catch((error) => {
-        console.error('Tau/Replicad CAD initialization failed', error)
+        console.error('Tau/Replicad STEP loading failed', error)
       })
 
     const resize = () => {
