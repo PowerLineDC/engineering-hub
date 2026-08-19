@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { importSTEP } from 'replicad'
 import initOpenCascade from 'replicad-opencascadejs'
 import { setOC } from 'replicad'
@@ -19,6 +20,7 @@ let cadReady: Promise<void> | null = null
 function initCad() {
   if (!cadReady) {
     cadReady = initOpenCascade({ locateFile: () => replicadWasm }).then((oc) => {
+      console.log('[CAD] OpenCascade initialized')
       setOC(oc)
     })
   }
@@ -26,26 +28,54 @@ function initCad() {
 }
 
 async function loadStepModel(url: string): Promise<CadShape> {
+  console.log('[CAD] Loading STEP:', url)
+
   const response = await fetch(url)
+
+  console.log('[CAD] STEP response:', response.status, response.statusText)
+  console.log('[CAD] STEP content-type:', response.headers.get('content-type'))
+
   if (!response.ok) {
     throw new Error(`STEP download failed: ${response.status} ${response.statusText}`)
   }
 
   const blob = await response.blob()
-  return importSTEP(blob)
+
+  console.log('[CAD] STEP size:', blob.size, 'bytes')
+  console.log('[CAD] STEP type:', blob.type)
+
+  const shape = await importSTEP(blob)
+
+  console.log('[CAD] STEP imported:', shape)
+
+  return shape
 }
 
 function addReplicadShape(scene: THREE.Scene, shape: CadShape, material: THREE.Material) {
+  console.log('[CAD] Tessellating STEP shape')
+
   const mesh = shape.mesh({ tolerance: 0.5, angularTolerance: 0.2 })
+
+  console.log('[CAD] Mesh generated:', {
+    vertices: mesh.vertices.length,
+    normals: mesh.normals.length,
+    triangles: mesh.triangles.length,
+  })
+
   const geometry = new THREE.BufferGeometry()
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(mesh.vertices, 3))
   geometry.setAttribute('normal', new THREE.Float32BufferAttribute(mesh.normals, 3))
   geometry.setIndex(Array.from(mesh.triangles))
   geometry.computeBoundingSphere()
 
+  console.log('[CAD] Geometry bounding sphere:', geometry.boundingSphere)
+
   const object = new THREE.Mesh(geometry, material)
   object.scale.setScalar(0.01)
   scene.add(object)
+
+  console.log('[CAD] STEP mesh added to Three.js scene')
+
   return object
 }
 
