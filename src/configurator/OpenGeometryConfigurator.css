@@ -1,0 +1,163 @@
+.og-configurator-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.72);
+}
+
+.og-configurator {
+  width: min(1400px, 96vw);
+  height: min(860px, 92vh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 16px;
+  background: #171717;
+  color: #f2f2f2;
+  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.45);
+}
+
+.og-configurator-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 20px 24px;
+  border-bottom: 1px solid #303030;
+}
+
+.og-configurator-kicker {
+  margin-bottom: 6px;
+  color: #9b9b9b;
+  font-size: 12px;
+}
+
+.og-configurator-header h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.og-configurator-header p {
+  margin: 6px 0 0;
+  color: #aaa;
+}
+
+.og-configurator-close {
+  border: 0;
+  background: transparent;
+  color: #ddd;
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.og-configurator-body {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+}
+
+.og-configurator-panel {
+  overflow: auto;
+  padding: 20px;
+  border-right: 1px solid #303030;
+}
+
+.og-configurator-panel section + section {
+  margin-top: 24px;
+}
+
+.og-configurator-panel h3 {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+
+.og-configurator-panel label {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+  color: #bbb;
+  font-size: 13px;
+}
+
+.og-configurator-panel input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border: 1px solid #3a3a3a;
+  border-radius: 7px;
+  background: #202020;
+  color: #fff;
+}
+
+.og-configurator-status {
+  padding-top: 16px;
+  border-top: 1px solid #303030;
+}
+
+.og-configurator-status div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 9px;
+  font-size: 12px;
+}
+
+.og-configurator-status span {
+  color: #888;
+}
+
+.og-configurator-status strong {
+  text-align: right;
+}
+
+.og-configurator-view {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: #101010;
+}
+
+.og-configurator-view .cad-scene {
+  width: 100%;
+  height: 100%;
+}
+
+.og-cad-hint {
+  position: absolute;
+  left: 16px;
+  bottom: 12px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #aaa;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+@media (max-width: 800px) {
+  .og-configurator-overlay {
+    padding: 0;
+  }
+
+  .og-configurator {
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
+  }
+
+  .og-configurator-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .og-configurator-panel {
+    max-height: 40vh;
+    border-right: 0;
+    border-bottom: 1px solid #303030;
+  }
+}
