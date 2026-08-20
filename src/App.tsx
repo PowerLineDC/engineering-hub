@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import './App.css'
-import { Configurator } from './configurator/Configurator'
 import { OpenGeometryConfigurator } from './configurator/OpenGeometryConfigurator'
 
 type Manufacturer = { id: string; logo: string; url: string }
@@ -11,7 +10,6 @@ function App() {
   const [selectedManufacturer, setSelectedManufacturer] = useState<string | null>(null)
   const [selectedChintFolder, setSelectedChintFolder] = useState<string | null>(null)
   const [isPanelAssemblyOpen, setIsPanelAssemblyOpen] = useState(false)
-  const [isConfiguratorOpen, setIsConfiguratorOpen] = useState(false)
   const [isOpenGeometryConfiguratorOpen, setIsOpenGeometryConfiguratorOpen] = useState(false)
 
   const tokens = [
@@ -119,7 +117,7 @@ function App() {
         <div className="nav-item"><span className="nav-icon">👤</span><span className="nav-label">Профиль</span></div>
       </nav>
 
-      {isPanelAssemblyOpen && !isConfiguratorOpen && !isOpenGeometryConfiguratorOpen && (
+      {isPanelAssemblyOpen && !isOpenGeometryConfiguratorOpen && (
         <div className="modal-overlay" onClick={() => setIsPanelAssemblyOpen(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
@@ -130,24 +128,14 @@ function App() {
               <div className="manufacturer-folders">
                 <button className="manufacturer-folder-button" onClick={() => {
                   setIsPanelAssemblyOpen(false)
-                  setIsConfiguratorOpen(true)
-                }}>
-                  ⚙️ Конфигуратор НКУ — Replicad
-                </button>
-                <button className="manufacturer-folder-button" onClick={() => {
-                  setIsPanelAssemblyOpen(false)
                   setIsOpenGeometryConfiguratorOpen(true)
                 }}>
-                  ⚙️ Конфигуратор НКУ — OpenGeometry
+                  ⚙️ Конфигуратор
                 </button>
               </div>
             </div>
           </div>
         </div>
-      )}
-
-      {isConfiguratorOpen && (
-        <Configurator onClose={() => setIsConfiguratorOpen(false)} />
       )}
 
       {isOpenGeometryConfiguratorOpen && (
