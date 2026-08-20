@@ -3,6 +3,8 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { importSTEP } from 'replicad'
 import initOpenCascade from 'replicad-opencascadejs'
+import opencascadeWasm from 'replicad-opencascadejs/src/replicad_single.wasm?url'
+console.log("OpenCascade WASM URL:", opencascadeWasm);
 import { setOC } from 'replicad'
 
 type CadSceneProps = {
@@ -163,3 +165,4 @@ export function CadScene({ width, height, depth, railCount }: CadSceneProps) {
 
   return <div ref={containerRef} className="cad-scene" />
 }
+
