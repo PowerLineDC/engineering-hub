@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import './App.css'
 import { Configurator } from './configurator/Configurator'
+import { OpenGeometryConfigurator } from './configurator/OpenGeometryConfigurator'
 
 type Manufacturer = { id: string; logo: string; url: string }
 
@@ -11,6 +12,7 @@ function App() {
   const [selectedChintFolder, setSelectedChintFolder] = useState<string | null>(null)
   const [isPanelAssemblyOpen, setIsPanelAssemblyOpen] = useState(false)
   const [isConfiguratorOpen, setIsConfiguratorOpen] = useState(false)
+  const [isOpenGeometryConfiguratorOpen, setIsOpenGeometryConfiguratorOpen] = useState(false)
 
   const tokens = [
     { id: 'Производители', icon: '🏭' },
@@ -117,7 +119,7 @@ function App() {
         <div className="nav-item"><span className="nav-icon">👤</span><span className="nav-label">Профиль</span></div>
       </nav>
 
-      {isPanelAssemblyOpen && !isConfiguratorOpen && (
+      {isPanelAssemblyOpen && !isConfiguratorOpen && !isOpenGeometryConfiguratorOpen && (
         <div className="modal-overlay" onClick={() => setIsPanelAssemblyOpen(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
@@ -130,7 +132,13 @@ function App() {
                   setIsPanelAssemblyOpen(false)
                   setIsConfiguratorOpen(true)
                 }}>
-                  ⚙️ Конфигуратор НКУ
+                  ⚙️ Конфигуратор НКУ — Replicad
+                </button>
+                <button className="manufacturer-folder-button" onClick={() => {
+                  setIsPanelAssemblyOpen(false)
+                  setIsOpenGeometryConfiguratorOpen(true)
+                }}>
+                  ⚙️ Конфигуратор НКУ — OpenGeometry
                 </button>
               </div>
             </div>
@@ -140,6 +148,10 @@ function App() {
 
       {isConfiguratorOpen && (
         <Configurator onClose={() => setIsConfiguratorOpen(false)} />
+      )}
+
+      {isOpenGeometryConfiguratorOpen && (
+        <OpenGeometryConfigurator onClose={() => setIsOpenGeometryConfiguratorOpen(false)} />
       )}
 
       {isManufacturerOpen && (
