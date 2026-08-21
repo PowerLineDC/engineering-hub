@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { OpenGeometry } from 'opengeometry'
-import wasmUrl from 'opengeometry/opengeometry_bg.wasm?url'
-import StepWorker from './stepWorker?worker'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js'
 
 type OpenGeometryCadSceneProps = {
   width: number
@@ -16,27 +16,6 @@ type OpenGeometryCadSceneProps = {
 type CadMeshTemplate = {
   geometry: THREE.BufferGeometry
   material: THREE.MeshStandardMaterial
-}
-
-type WorkerResponse = {
-  id: number
-  ok: boolean
-  vertices?: Float32Array
-  normals?: Float32Array
-  triangles?: Uint32Array
-  error?: string
-}
-
-let openGeometryReady: Promise<void> | null = null
-const stepCache = new Map<string, Promise<CadMeshTemplate>>()
-
-function initOpenGeometry() {
-  if (!openGeometryReady) {
-    openGeometryReady = OpenGeometry.create({ wasmURL: wasmUrl }).then(() => {
-      console.log('[OpenGeometry] WASM initialized')
-    })
-  }
-  return openGeometryReady
 }
 
 const STEP_ROOT = '/library/dkc/Osnovnyye_elementy_korpusa_CQE_N/Osnovnie_elementi_korpusa_CQE%20N'
@@ -56,71 +35,61 @@ function cabinetStepUrl(width: number, depth: number) {
   return `${BODY_STEP_ROOT}/${cabinetArticle(width, depth).replaceAll(' ', '%20')}.STEP`
 }
 
-const stepWorker = new StepWorker()
-let workerRequestId = 0
-const workerRequests = new Map<number, {
-  resolve: (value: WorkerResponse) => void
-  reject: (reason?: unknown) => void
-}>()
-
-stepWorker.onmessage = (event: MessageEvent<WorkerResponse>) => {
-  const request = workerRequests.get(event.data.id)
-  if (!request) return
-  workerRequests.delete(event.data.id)
-  request.resolve(event.data)
+function glbUrlFromStepUrl(stepUrl: string) {
+  const pathname = new URL(stepUrl, window.location.origin).pathname
+  const filename = decodeURIComponent(pathname.split('/').pop() ?? '')
+  const base = filename.replace(/\.step$/i, '')
+  return `/models/dkc/${encodeURIComponent(base)}.glb`
 }
 
-stepWorker.onerror = (event) => {
-  for (const [id, request] of workerRequests) {
-    workerRequests.delete(id)
-    request.reject(event.error ?? new Error(event.message || 'STEP worker failed'))
-  }
-}
+const gltfLoader = new GLTFLoader()
+const dracoLoader = new DRACOLoader()
+dracoLoader.setDecoderPath('/draco/')
+gltfLoader.setDRACOLoader(dracoLoader)
+gltfLoader.setMeshoptDecoder(MeshoptDecoder)
 
-function parseStepInWorker(url: string): Promise<WorkerResponse> {
-  const id = ++workerRequestId
-  return new Promise((resolve, reject) => {
-    workerRequests.set(id, { resolve, reject })
-    stepWorker.postMessage({ id, url })
-  })
-}
+const glbCache = new Map<string, Promise<CadMeshTemplate>>()
 
-async function loadStepTemplate(url: string, label: string): Promise<CadMeshTemplate> {
-  const cached = stepCache.get(url)
+async function loadGlbTemplate(stepUrl: string, label: string): Promise<CadMeshTemplate> {
+  const glbUrl = glbUrlFromStepUrl(stepUrl)
+  const cached = glbCache.get(glbUrl)
   if (cached) {
-    console.log('[CAD cache] hit', label, url)
+    console.log('[GLB cache] hit', label, glbUrl)
     return cached
   }
 
   const loading = (async () => {
-    console.log('[CAD cache] loading STEP in worker', label, url)
-    const result = await parseStepInWorker(url)
-    if (!result.ok || !result.vertices || !result.normals || !result.triangles) {
-      throw new Error(`${label}: ${result.error ?? 'STEP worker returned no geometry'}`)
-    }
+    console.log('[GLB cache] loading Draco GLB', label, glbUrl)
+    const gltf = await gltfLoader.loadAsync(glbUrl)
+    let sourceMesh: THREE.Mesh | null = null
 
-    const geometry = new THREE.BufferGeometry()
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(result.vertices, 3))
-    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(result.normals, 3))
-    geometry.setIndex(Array.from(result.triangles))
-    geometry.computeBoundingBox()
-    geometry.computeBoundingSphere()
-
-    const material = new THREE.MeshStandardMaterial({
-      color: 0x777777,
-      metalness: 0.15,
-      roughness: 0.7,
+    gltf.scene.traverse((object) => {
+      if (!sourceMesh && object instanceof THREE.Mesh) sourceMesh = object
     })
 
-    console.log('[CAD cache] ready', label, url)
+    if (!sourceMesh) throw new Error(`${label}: GLB contains no mesh`)
+
+    const geometry = sourceMesh.geometry.clone()
+    const sourceMaterial = Array.isArray(sourceMesh.material) ? sourceMesh.material[0] : sourceMesh.material
+    const material = sourceMaterial instanceof THREE.MeshStandardMaterial
+      ? sourceMaterial.clone()
+      : new THREE.MeshStandardMaterial({
+          color: 0x777777,
+          metalness: 0.15,
+          roughness: 0.7,
+        })
+
+    geometry.computeBoundingBox()
+    geometry.computeBoundingSphere()
+    console.log('[GLB cache] ready', label, glbUrl)
     return { geometry, material }
   })()
 
-  stepCache.set(url, loading)
+  glbCache.set(glbUrl, loading)
   try {
     return await loading
   } catch (error) {
-    stepCache.delete(url)
+    glbCache.delete(glbUrl)
     throw error
   }
 }
@@ -183,8 +152,8 @@ export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHe
         const cabinetUrl = cabinetStepUrl(currentWidth, currentDepth)
 
         const [plinthTemplate, cabinetTemplate] = await Promise.all([
-          loadStepTemplate(plinthUrl, `plinth ${currentPlinthHeight}`),
-          loadStepTemplate(cabinetUrl, `cabinet ${currentWidth}x${currentDepth}`),
+          loadGlbTemplate(plinthUrl, `plinth ${currentPlinthHeight}`),
+          loadGlbTemplate(cabinetUrl, `cabinet ${currentWidth}x${currentDepth}`),
         ])
 
         if (disposed || version !== loadVersion) return
@@ -214,13 +183,14 @@ export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHe
         importedCabinet.position.z -= (cabinetBox.min.z + cabinetBox.max.z) / 2
         importedCabinet.position.y += plinthBox.max.y - cabinetBox.min.y
 
-        console.log('[DKC] Cabinet assembly loaded', {
+        console.log('[DKC] Cabinet assembly loaded from GLB', {
           width: currentWidth,
           depth: currentDepth,
           plinthHeight: currentPlinthHeight,
           railCount: parametersRef.current.railCount,
           cabinetArticle: cabinetArticle(currentWidth, currentDepth),
-          cabinetSource: cabinetUrl,
+          plinthSource: glbUrlFromStepUrl(plinthUrl),
+          cabinetSource: glbUrlFromStepUrl(cabinetUrl),
         })
       } catch (error) {
         if (!disposed && version === loadVersion) {
