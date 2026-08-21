@@ -12,6 +12,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(__dirname, '..')
 const inputRoot = path.join(root, 'public', 'cad', 'Osnovnyye_elementy_korpusa_CQE_N')
 const outputRoot = path.join(root, 'public', 'models', 'dkc')
+const dracoSource = path.join(root, 'node_modules', 'three', 'examples', 'jsm', 'libs', 'draco')
+const dracoPublicRoot = path.join(root, 'public', 'draco')
 const wasmPath = path.join(root, 'node_modules', 'replicad-opencascadejs', 'src', 'replicad_single.wasm')
 
 function toFloat32(value) {
@@ -63,6 +65,14 @@ async function createGlb(vertices, normals, triangles, output) {
   await fs.writeFile(output, await io.writeBinary(document))
 }
 
+async function copyDracoDecoder() {
+  await fs.mkdir(dracoPublicRoot, { recursive: true })
+  for (const filename of ['draco_decoder.js', 'draco_decoder.wasm', 'draco_wasm_wrapper.js']) {
+    await fs.copyFile(path.join(dracoSource, filename), path.join(dracoPublicRoot, filename))
+  }
+  console.log('[GLB/Draco] Browser decoder copied to public/draco')
+}
+
 async function main() {
   console.log('[STEP→GLB] Initializing OpenCascade...')
   const wasm = await fs.readFile(wasmPath)
@@ -74,6 +84,8 @@ async function main() {
   console.log('[STEP→GLB] OpenCascade ready')
 
   await fs.mkdir(outputRoot, { recursive: true })
+  await copyDracoDecoder()
+
   const files = (await fs.readdir(inputRoot, { recursive: true }))
     .filter((file) => typeof file === 'string' && file.toLowerCase().endsWith('.step'))
 
