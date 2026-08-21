@@ -15,8 +15,16 @@ type OpenGeometryCadSceneProps = {
   plinthHeight: number
 }
 
+type CadMeshTemplate = {
+  geometry: THREE.BufferGeometry
+  material: THREE.MeshStandardMaterial
+  min: THREE.Vector3
+  max: THREE.Vector3
+}
+
 let openGeometryReady: Promise<void> | null = null
 let openCascadeReady: Promise<void> | null = null
+const stepCache = new Map<string, Promise<CadMeshTemplate>>()
 
 function initOpenGeometry() {
   if (!openGeometryReady) {
@@ -60,40 +68,84 @@ function cabinetStepUrl(width: number, depth: number) {
   return `${BODY_STEP_ROOT}/${cabinetArticle(width, depth).replaceAll(' ', '%20')}.STEP`
 }
 
-function createMeshFromReplicadShape(shape: any) {
-  const data = shape.mesh({ tolerance: 0.05, angularTolerance: 30 })
-  const geometry = new THREE.BufferGeometry()
+async function loadStepTemplate(url: string, label: string): Promise<CadMeshTemplate> {
+  const cached = stepCache.get(url)
+  if (cached) {
+    console.log('[CAD cache] hit', label, url)
+    return cached
+  }
 
-  geometry.setAttribute(
-    'position',
-    new THREE.Float32BufferAttribute(data.vertices, 3),
-  )
-  geometry.setAttribute(
-    'normal',
-    new THREE.Float32BufferAttribute(data.normals, 3),
-  )
-  geometry.setIndex(data.triangles)
-  geometry.computeBoundingBox()
-  geometry.computeBoundingSphere()
+  const loading = (async () => {
+    console.log('[CAD cache] loading STEP', label, url)
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(`${label} STEP request failed: ${response.status} ${response.statusText}`)
+    }
 
-  const mesh = new THREE.Mesh(
-    geometry,
-    new THREE.MeshStandardMaterial({
+    const blob = await response.blob()
+    const shape = await importSTEP(blob)
+    const data = shape.mesh({ tolerance: 0.05, angularTolerance: 30 })
+    const geometry = new THREE.BufferGeometry()
+
+    geometry.setAttribute(
+      'position',
+      new THREE.Float32BufferAttribute(data.vertices, 3),
+    )
+    geometry.setAttribute(
+      'normal',
+      new THREE.Float32BufferAttribute(data.normals, 3),
+    )
+    geometry.setIndex(data.triangles)
+    geometry.computeBoundingBox()
+    geometry.computeBoundingSphere()
+
+    const box = geometry.boundingBox
+    if (!box) {
+      throw new Error(`${label} STEP produced geometry without a bounding box`)
+    }
+
+    const material = new THREE.MeshStandardMaterial({
       color: 0x777777,
       metalness: 0.15,
       roughness: 0.7,
-    }),
-  )
+    })
 
+    console.log('[CAD cache] ready', label, url)
+
+    return {
+      geometry,
+      material,
+      min: box.min.clone(),
+      max: box.max.clone(),
+    }
+  })()
+
+  stepCache.set(url, loading)
+
+  try {
+    return await loading
+  } catch (error) {
+    stepCache.delete(url)
+    throw error
+  }
+}
+
+function createMesh(template: CadMeshTemplate, name: string) {
+  const mesh = new THREE.Mesh(template.geometry, template.material)
+  mesh.name = name
   // DKC STEP dimensions are in millimetres; the configurator scene uses
   // 1 scene unit = 100 mm.
   mesh.scale.setScalar(0.01)
-
   return mesh
 }
 
 export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHeight }: OpenGeometryCadSceneProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const parametersRef = useRef({ width, height, depth, railCount, plinthHeight })
+
+  useEffect(() => {
+    parametersRef.current = { width, height, depth, railCount, plinthHeight }
+  }, [width, height, depth, railCount, plinthHeight])
 
   useEffect(() => {
     const container = containerRef.current
@@ -104,7 +156,7 @@ export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHe
     scene.background = new THREE.Color('#101010')
 
     const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100)
-    camera.position.set(9, 8, 9)
+    camera.position.set(4, 3.5, 4)
 
     const renderer = new THREE.WebGLRenderer({ antialias: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -113,6 +165,8 @@ export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHe
 
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
+    controls.target.set(0, 1.5, 0)
+    controls.update()
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 2))
     const directional = new THREE.DirectionalLight(0xffffff, 2)
@@ -120,71 +174,86 @@ export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHe
     scene.add(directional)
     scene.add(new THREE.GridHelper(12, 24, 0x444444, 0x222222))
 
+    const cabinetPreview = new Cuboid({
+      center: new Vector3(0, 0, 0),
+      width: width / 100,
+      height: height / 100,
+      depth: depth / 100,
+      color: 0x333333,
+    })
+    cabinetPreview.outline = true
+    cabinetPreview.visible = false
+    scene.add(cabinetPreview)
+
     let importedPlinth: THREE.Mesh | null = null
     let importedCabinet: THREE.Mesh | null = null
-    let cabinet: Cuboid | null = null
+    let loadVersion = 0
 
-    Promise.all([initOpenGeometry(), initializeOpenCascade()])
-      .then(async () => {
-        if (disposed) return
+    const applyAssembly = async () => {
+      const version = ++loadVersion
+      const { width: currentWidth, depth: currentDepth, plinthHeight: currentPlinthHeight } = parametersRef.current
 
-        cabinet = new Cuboid({
-          center: new Vector3(0, 0, 0),
-          width: width / 100,
-          height: height / 100,
-          depth: depth / 100,
-          color: 0x333333,
-        })
-        cabinet.outline = true
-        cabinet.visible = false
-        scene.add(cabinet)
+      try {
+        await Promise.all([initOpenGeometry(), initializeOpenCascade()])
+        if (disposed || version !== loadVersion) return
 
-        const plinthResponse = await fetch(plinthStepUrl(plinthHeight))
-        if (!plinthResponse.ok) {
-          throw new Error(`Plinth STEP request failed: ${plinthResponse.status} ${plinthResponse.statusText}`)
-        }
+        const plinthUrl = plinthStepUrl(currentPlinthHeight)
+        const cabinetUrl = cabinetStepUrl(currentWidth, currentDepth)
 
-        const plinthBlob = await plinthResponse.blob()
-        importedPlinth = createMeshFromReplicadShape(await importSTEP(plinthBlob))
-        importedPlinth.name = plinthHeight === 200 ? 'R5NBP02B' : 'R5NBP01B'
+        const [plinthTemplate, cabinetTemplate] = await Promise.all([
+          loadStepTemplate(plinthUrl, `plinth ${currentPlinthHeight}`),
+          loadStepTemplate(cabinetUrl, `cabinet ${currentWidth}x${currentDepth}`),
+        ])
+
+        if (disposed || version !== loadVersion) return
+
+        if (importedPlinth) scene.remove(importedPlinth)
+        if (importedCabinet) scene.remove(importedCabinet)
+
+        importedPlinth = createMesh(
+          plinthTemplate,
+          currentPlinthHeight === 200 ? 'R5NBP02B' : 'R5NBP01B',
+        )
+        importedCabinet = createMesh(
+          cabinetTemplate,
+          cabinetArticle(currentWidth, currentDepth),
+        )
+
         scene.add(importedPlinth)
+        scene.add(importedCabinet)
 
-        const plinthBox = new THREE.Box3().setFromObject(importedPlinth)
+        const plinthBox = new THREE.Box3(
+          plinthTemplate.min.clone().multiplyScalar(0.01),
+          plinthTemplate.max.clone().multiplyScalar(0.01),
+        )
         importedPlinth.position.x -= (plinthBox.min.x + plinthBox.max.x) / 2
         importedPlinth.position.z -= (plinthBox.min.z + plinthBox.max.z) / 2
         importedPlinth.position.y -= plinthBox.min.y
 
-        const cabinetResponse = await fetch(cabinetStepUrl(width, depth))
-        if (!cabinetResponse.ok) {
-          throw new Error(`Cabinet STEP request failed: ${cabinetResponse.status} ${cabinetResponse.statusText}`)
-        }
-
-        const cabinetBlob = await cabinetResponse.blob()
-        importedCabinet = createMeshFromReplicadShape(await importSTEP(cabinetBlob))
-        importedCabinet.name = cabinetArticle(width, depth)
-        scene.add(importedCabinet)
-
-        const cabinetBox = new THREE.Box3().setFromObject(importedCabinet)
+        const cabinetBox = new THREE.Box3(
+          cabinetTemplate.min.clone().multiplyScalar(0.01),
+          cabinetTemplate.max.clone().multiplyScalar(0.01),
+        )
         importedCabinet.position.x -= (cabinetBox.min.x + cabinetBox.max.x) / 2
         importedCabinet.position.z -= (cabinetBox.min.z + cabinetBox.max.z) / 2
         importedCabinet.position.y += plinthBox.max.y - cabinetBox.min.y
 
-        camera.position.set(4, 3.5, 4)
-        controls.target.set(0, 1.5, 0)
-        controls.update()
-
-        console.log('[DKC] Cabinet assembly loaded', {
-          width,
-          depth,
-          plinthHeight,
-          railCount,
-          cabinetArticle: cabinetArticle(width, depth),
-          cabinetSource: cabinetStepUrl(width, depth),
+        console.log('[DKC] Cabinet assembly displayed', {
+          width: currentWidth,
+          depth: currentDepth,
+          plinthHeight: currentPlinthHeight,
+          railCount: parametersRef.current.railCount,
+          cabinetArticle: cabinetArticle(currentWidth, currentDepth),
+          cabinetSource: cabinetUrl,
         })
-      })
-      .catch((error) => {
-        console.error('[DKC] Cabinet assembly loading failed', error)
-      })
+      } catch (error) {
+        if (!disposed && version === loadVersion) {
+          console.error('[DKC] Cabinet assembly loading failed', error)
+        }
+      }
+    }
+
+    void applyAssembly()
 
     const resize = () => {
       const aspect = container.clientWidth / Math.max(container.clientHeight, 1)
@@ -206,19 +275,32 @@ export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHe
 
     return () => {
       disposed = true
+      loadVersion += 1
       cancelAnimationFrame(frame)
       resizeObserver.disconnect()
       controls.dispose()
       renderer.dispose()
+
       scene.traverse((object) => {
-        if (object instanceof THREE.Mesh) {
+        if (object instanceof THREE.Mesh && object !== importedPlinth && object !== importedCabinet) {
           object.geometry.dispose()
           if (Array.isArray(object.material)) object.material.forEach((material) => material.dispose())
           else object.material.dispose()
         }
       })
+
       container.removeChild(renderer.domElement)
     }
+  }, [])
+
+  useEffect(() => {
+    const { width: currentWidth, depth: currentDepth, plinthHeight: currentPlinthHeight } = parametersRef.current
+    console.log('[DKC] Parameters changed', {
+      width: currentWidth,
+      depth: currentDepth,
+      plinthHeight: currentPlinthHeight,
+      railCount: parametersRef.current.railCount,
+    })
   }, [width, height, depth, railCount, plinthHeight])
 
   return <div ref={containerRef} className="cad-scene" />
