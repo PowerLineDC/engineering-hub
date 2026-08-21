@@ -18,8 +18,6 @@ type OpenGeometryCadSceneProps = {
 type CadMeshTemplate = {
   geometry: THREE.BufferGeometry
   material: THREE.MeshStandardMaterial
-  min: THREE.Vector3
-  max: THREE.Vector3
 }
 
 let openGeometryReady: Promise<void> | null = null
@@ -99,11 +97,6 @@ async function loadStepTemplate(url: string, label: string): Promise<CadMeshTemp
     geometry.computeBoundingBox()
     geometry.computeBoundingSphere()
 
-    const box = geometry.boundingBox
-    if (!box) {
-      throw new Error(`${label} STEP produced geometry without a bounding box`)
-    }
-
     const material = new THREE.MeshStandardMaterial({
       color: 0x777777,
       metalness: 0.15,
@@ -111,13 +104,7 @@ async function loadStepTemplate(url: string, label: string): Promise<CadMeshTemp
     })
 
     console.log('[CAD cache] ready', label, url)
-
-    return {
-      geometry,
-      material,
-      min: box.min.clone(),
-      max: box.max.clone(),
-    }
+    return { geometry, material }
   })()
 
   stepCache.set(url, loading)
@@ -133,6 +120,8 @@ async function loadStepTemplate(url: string, label: string): Promise<CadMeshTemp
 function createMesh(template: CadMeshTemplate, name: string) {
   const mesh = new THREE.Mesh(template.geometry, template.material)
   mesh.name = name
+  // DKC STEP dimensions are in millimetres; the configurator scene uses
+  // 1 scene unit = 100 mm.
   mesh.scale.setScalar(0.01)
   return mesh
 }
@@ -140,9 +129,11 @@ function createMesh(template: CadMeshTemplate, name: string) {
 export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHeight }: OpenGeometryCadSceneProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const parametersRef = useRef({ width, height, depth, railCount, plinthHeight })
+  const applyAssemblyRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     parametersRef.current = { width, height, depth, railCount, plinthHeight }
+    applyAssemblyRef.current?.()
   }, [width, height, depth, railCount, plinthHeight])
 
   useEffect(() => {
@@ -150,6 +141,10 @@ export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHe
     if (!container) return
 
     let disposed = false
+    let loadVersion = 0
+    let importedPlinth: THREE.Mesh | null = null
+    let importedCabinet: THREE.Mesh | null = null
+
     const scene = new THREE.Scene()
     scene.background = new THREE.Color('#101010')
 
@@ -171,10 +166,6 @@ export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHe
     directional.position.set(5, 10, 7)
     scene.add(directional)
     scene.add(new THREE.GridHelper(12, 24, 0x444444, 0x222222))
-
-    let importedPlinth: THREE.Mesh | null = null
-    let importedCabinet: THREE.Mesh | null = null
-    let loadVersion = 0
 
     const applyAssembly = async () => {
       const version = ++loadVersion
@@ -234,6 +225,10 @@ export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHe
       }
     }
 
+    applyAssemblyRef.current = () => {
+      void applyAssembly()
+    }
+
     void applyAssembly()
 
     const resize = () => {
@@ -256,28 +251,15 @@ export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHe
 
     return () => {
       disposed = true
+      loadVersion += 1
+      applyAssemblyRef.current = null
       cancelAnimationFrame(frame)
       resizeObserver.disconnect()
       controls.dispose()
       renderer.dispose()
-      scene.traverse((object) => {
-        if (object instanceof THREE.Mesh) {
-          if (object.geometry !== undefined && !stepCacheHasGeometry(object.geometry)) {
-            object.geometry.dispose()
-          }
-          if (Array.isArray(object.material)) object.material.forEach((material) => material.dispose())
-        }
-      })
       container.removeChild(renderer.domElement)
     }
   }, [])
 
   return <div ref={containerRef} className="cad-scene" />
-}
-
-function stepCacheHasGeometry(geometry: THREE.BufferGeometry) {
-  for (const templatePromise of stepCache.values()) {
-    void templatePromise.then((template) => template.geometry === geometry)
-  }
-  return false
 }
