@@ -8,7 +8,8 @@
     "server": "node server/server.cjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "convert:dkc": "node scripts/convert-step-to-glb.mjs"
   },
   "dependencies": {
     "@types/three": "^0.184.0",
