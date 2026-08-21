@@ -44,8 +44,16 @@ async function loadGlbTemplate(stepUrl: string, label: string): Promise<CadMeshT
   if (cached) { console.log('[GLB cache] hit', label, key); return cached }
   const loading = (async () => {
     const manifest = await loadDkcManifest()
-    const glbUrl = manifest[key]
-    if (!glbUrl) throw new Error(`${label}: no generated GLB in manifest for ${key}`)
+    // The manifest is the authoritative mapping, but tolerate older manifests
+    // and regenerate-safe cases where the generated filename is deterministic.
+    // This also handles manifests created before all STEP files were present.
+    let glbUrl = manifest[key]
+    if (!glbUrl) {
+      const normalizedKey = key.normalize('NFC')
+      const manifestKey = Object.keys(manifest).find((candidate) => candidate.normalize('NFC') === normalizedKey)
+      glbUrl = manifestKey ? manifest[manifestKey] : `/models/dkc/${encodeURIComponent(key)}.glb`
+      console.warn('[GLB cache] manifest entry missing, trying deterministic GLB URL', { label, key, glbUrl })
+    }
     console.log('[GLB cache] loading Draco GLB', label, glbUrl)
     const response = await fetch(glbUrl, { cache: 'force-cache' })
     if (!response.ok) throw new Error(`${label}: GLB HTTP ${response.status} at ${glbUrl}`)
