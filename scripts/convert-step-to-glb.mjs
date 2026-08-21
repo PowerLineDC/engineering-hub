@@ -19,7 +19,7 @@ async function createGlb(vertices, normals, triangles, output) {
   const document = new Document()
   const buffer = document.createBuffer('DKC geometry buffer')
   const rootNode = document.createNode('DKC component')
-  const scene = document.createScene('Scene').addChild(rootNode)
+  document.createScene('Scene').addChild(rootNode)
   const mesh = document.createMesh('DKC mesh')
   const primitive = document.createPrimitive()
   primitive.setAttribute('POSITION', document.createAccessor('POSITION').setType('VEC3').setBuffer(buffer).setArray(new Float32Array(vertices)))
@@ -56,7 +56,7 @@ async function main() {
   const entries = await fs.readdir(inputRoot, { recursive: true, withFileTypes: true })
   const files = entries
     .filter((entry) => entry.isFile() && /\.(step|stp)$/i.test(entry.name))
-    .map((entry) => path.relative(inputRoot, path.join(entry.path, entry.name)))
+    .map((entry) => path.relative(inputRoot, path.join(entry.parentPath ?? entry.path, entry.name)))
     .sort((a, b) => a.localeCompare(b, 'en'))
   if (!files.length) throw new Error(`No STEP/STP files found under ${inputRoot}`)
 
