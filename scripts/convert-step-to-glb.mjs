@@ -26,11 +26,7 @@ function findFreeCad() {
     : ['/usr/bin/FreeCADCmd', '/usr/local/bin/FreeCADCmd', '/usr/bin/freecadcmd']
 
   for (const candidate of candidates) {
-    try {
-      return requirePath(candidate)
-    } catch {
-      // continue
-    }
+    try { return requirePath(candidate) } catch {}
   }
 
   const command = process.platform === 'win32' ? 'where.exe' : 'which'
@@ -39,7 +35,6 @@ function findFreeCad() {
     const found = result.stdout.trim().split(/\r?\n/).find(Boolean)
     if (found) return found
   }
-
   return null
 }
 
@@ -73,10 +68,19 @@ async function compressDraco(input, output) {
 }
 
 function runFreeCad(freecad, input, output) {
-  const result = spawnSync(freecad, [freecadScript, input, output], {
+  const scriptPath = freecadScript.replace(/\\/g, '/').replace(/'/g, "\\'")
+  const command = `exec(open('${scriptPath}', encoding='utf-8').read())`
+  const env = {
+    ...process.env,
+    ENGINEERINGHUB_STEP_INPUT: input,
+    ENGINEERINGHUB_MESH_OUTPUT: output,
+  }
+
+  const result = spawnSync(freecad, ['-c', command], {
     encoding: 'utf8',
     windowsHide: true,
     maxBuffer: 16 * 1024 * 1024,
+    env,
   })
   if (result.stdout) process.stdout.write(result.stdout)
   if (result.stderr) process.stderr.write(result.stderr)
@@ -89,9 +93,7 @@ async function main() {
   console.log('[STEP→GLB] Using native FreeCAD for STEP import/tessellation.')
   const freecad = findFreeCad()
   if (!freecad) {
-    throw new Error(
-      'FreeCADCmd was not found. Install FreeCAD and rerun, or set FREECAD_CMD to the full path of FreeCADCmd.exe.'
-    )
+    throw new Error('FreeCADCmd was not found. Install FreeCAD and rerun, or set FREECAD_CMD to the full path of FreeCADCmd.exe.')
   }
   console.log(`[STEP→GLB] FreeCADCmd: ${freecad}`)
   await copyDracoDecoder()
@@ -123,9 +125,7 @@ async function main() {
           skipped += 1
           continue
         }
-      } catch {
-        // GLB does not exist yet.
-      }
+      } catch {}
 
       await fs.mkdir(path.dirname(output), { recursive: true })
       console.log(`[STEP→FreeCAD] ${relative}`)
