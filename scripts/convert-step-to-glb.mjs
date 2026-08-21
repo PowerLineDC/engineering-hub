@@ -9,7 +9,8 @@ import { importSTEP, setOC } from 'replicad'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(__dirname, '..')
-const inputRoot = path.join(root, 'public', 'cad', 'Osnovnyye_elementy_korpusa_CQE_N')
+// Source of truth: the DKC library. Convert every STEP model stored there.
+const inputRoot = path.join(root, 'public', 'library', 'dkc')
 const outputRoot = path.join(root, 'public', 'models', 'dkc')
 const dracoSource = path.join(root, 'node_modules', 'three', 'examples', 'jsm', 'libs', 'draco')
 const dracoPublicRoot = path.join(root, 'public', 'draco')
@@ -67,8 +68,11 @@ async function main() {
     .filter((file) => typeof file === 'string' && file.toLowerCase().endsWith('.step'))
   if (!files.length) throw new Error(`No STEP files found under ${inputRoot}`)
 
+  console.log(`[STEP→GLB] Found ${files.length} STEP model(s) under ${inputRoot}`)
+
   const manifest = {}
   let converted = 0
+  let skipped = 0
   for (const relative of files) {
     const input = path.join(inputRoot, relative)
     const base = path.basename(relative, path.extname(relative))
@@ -78,6 +82,7 @@ async function main() {
       const sourceStat = await fs.stat(input)
       if (stat.mtimeMs < sourceStat.mtimeMs || stat.size === 0) throw new Error('stale')
       console.log(`[STEP→GLB] skip ${relative} (already converted)`)
+      skipped += 1
     } catch {
       console.log(`[STEP→mesh] ${relative}`)
       const blob = new Blob([await fs.readFile(input)])
@@ -93,7 +98,7 @@ async function main() {
 
   await fs.writeFile(path.join(outputRoot, 'manifest.json'), JSON.stringify(manifest, null, 2))
   console.log(`[STEP→GLB] Manifest written with ${Object.keys(manifest).length} model(s).`)
-  console.log(`[STEP→GLB] Converted ${converted} model(s).`)
+  console.log(`[STEP→GLB] Converted ${converted} model(s), skipped ${skipped} already-converted model(s).`)
 }
 
 main().catch((error) => {
