@@ -17,16 +17,27 @@ const wasmPath = path.join(root, 'node_modules', 'replicad-opencascadejs', 'src'
 
 async function createGlb(vertices, normals, triangles, output) {
   const document = new Document()
+  const buffer = document.createBuffer('DKC geometry buffer')
   const rootNode = document.createNode('DKC component')
   const scene = document.createScene('Scene').addChild(rootNode)
   const mesh = document.createMesh('DKC mesh')
   const primitive = document.createPrimitive()
-  primitive.setAttribute('POSITION', document.createAccessor('POSITION').setType('VEC3').setArray(new Float32Array(vertices)))
-  primitive.setAttribute('NORMAL', document.createAccessor('NORMAL').setType('VEC3').setArray(new Float32Array(normals)))
-  primitive.setIndices(document.createAccessor('indices').setType('SCALAR').setArray(new Uint32Array(triangles)))
+
+  primitive.setAttribute(
+    'POSITION',
+    document.createAccessor('POSITION').setType('VEC3').setBuffer(buffer).setArray(new Float32Array(vertices)),
+  )
+  primitive.setAttribute(
+    'NORMAL',
+    document.createAccessor('NORMAL').setType('VEC3').setBuffer(buffer).setArray(new Float32Array(normals)),
+  )
+  primitive.setIndices(
+    document.createAccessor('indices').setType('SCALAR').setBuffer(buffer).setArray(new Uint32Array(triangles)),
+  )
   primitive.setMaterial(document.createMaterial('DKC default material').setBaseColorFactor([0.47, 0.47, 0.47, 1]))
   mesh.addPrimitive(primitive)
   rootNode.setMesh(mesh)
+
   const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({
     'draco3d.decoder': await draco3d.createDecoderModule(),
     'draco3d.encoder': await draco3d.createEncoderModule(),
