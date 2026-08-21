@@ -2,10 +2,8 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { OpenGeometry } from 'opengeometry'
-import { importSTEP, setOC } from 'replicad'
-import initOpenCascade from 'replicad-opencascadejs'
 import wasmUrl from 'opengeometry/opengeometry_bg.wasm?url'
-import opencascadeWasm from 'replicad-opencascadejs/src/replicad_single.wasm?url'
+import StepWorker from './stepWorker?worker'
 
 type OpenGeometryCadSceneProps = {
   width: number
@@ -20,8 +18,16 @@ type CadMeshTemplate = {
   material: THREE.MeshStandardMaterial
 }
 
+type WorkerResponse = {
+  id: number
+  ok: boolean
+  vertices?: Float32Array
+  normals?: Float32Array
+  triangles?: Uint32Array
+  error?: string
+}
+
 let openGeometryReady: Promise<void> | null = null
-let openCascadeReady: Promise<void> | null = null
 const stepCache = new Map<string, Promise<CadMeshTemplate>>()
 
 function initOpenGeometry() {
@@ -31,22 +37,6 @@ function initOpenGeometry() {
     })
   }
   return openGeometryReady
-}
-
-async function initializeOpenCascade() {
-  if (!openCascadeReady) {
-    const init = initOpenCascade as unknown as (options: {
-      locateFile: () => string
-    }) => Promise<any>
-
-    openCascadeReady = init({
-      locateFile: () => opencascadeWasm,
-    }).then((oc) => {
-      setOC(oc)
-      console.log('[OpenCascade] WASM initialized for STEP import')
-    })
-  }
-  return openCascadeReady
 }
 
 const STEP_ROOT = '/library/dkc/Osnovnyye_elementy_korpusa_CQE_N/Osnovnie_elementi_korpusa_CQE%20N'
@@ -66,6 +56,35 @@ function cabinetStepUrl(width: number, depth: number) {
   return `${BODY_STEP_ROOT}/${cabinetArticle(width, depth).replaceAll(' ', '%20')}.STEP`
 }
 
+const stepWorker = new StepWorker()
+let workerRequestId = 0
+const workerRequests = new Map<number, {
+  resolve: (value: WorkerResponse) => void
+  reject: (reason?: unknown) => void
+}>()
+
+stepWorker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+  const request = workerRequests.get(event.data.id)
+  if (!request) return
+  workerRequests.delete(event.data.id)
+  request.resolve(event.data)
+}
+
+stepWorker.onerror = (event) => {
+  for (const [id, request] of workerRequests) {
+    workerRequests.delete(id)
+    request.reject(event.error ?? new Error(event.message || 'STEP worker failed'))
+  }
+}
+
+function parseStepInWorker(url: string): Promise<WorkerResponse> {
+  const id = ++workerRequestId
+  return new Promise((resolve, reject) => {
+    workerRequests.set(id, { resolve, reject })
+    stepWorker.postMessage({ id, url })
+  })
+}
+
 async function loadStepTemplate(url: string, label: string): Promise<CadMeshTemplate> {
   const cached = stepCache.get(url)
   if (cached) {
@@ -74,20 +93,16 @@ async function loadStepTemplate(url: string, label: string): Promise<CadMeshTemp
   }
 
   const loading = (async () => {
-    console.log('[CAD cache] loading STEP', label, url)
-    const response = await fetch(url)
-    if (!response.ok) {
-      throw new Error(`${label} STEP request failed: ${response.status} ${response.statusText}`)
+    console.log('[CAD cache] loading STEP in worker', label, url)
+    const result = await parseStepInWorker(url)
+    if (!result.ok || !result.vertices || !result.normals || !result.triangles) {
+      throw new Error(`${label}: ${result.error ?? 'STEP worker returned no geometry'}`)
     }
 
-    const blob = await response.blob()
-    const shape = await importSTEP(blob)
-    const data = shape.mesh({ tolerance: 0.05, angularTolerance: 30 })
     const geometry = new THREE.BufferGeometry()
-
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(data.vertices, 3))
-    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(data.normals, 3))
-    geometry.setIndex(data.triangles)
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(result.vertices, 3))
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(result.normals, 3))
+    geometry.setIndex(Array.from(result.triangles))
     geometry.computeBoundingBox()
     geometry.computeBoundingSphere()
 
@@ -102,7 +117,6 @@ async function loadStepTemplate(url: string, label: string): Promise<CadMeshTemp
   })()
 
   stepCache.set(url, loading)
-
   try {
     return await loading
   } catch (error) {
@@ -165,11 +179,6 @@ export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHe
       const { width: currentWidth, depth: currentDepth, plinthHeight: currentPlinthHeight } = parametersRef.current
 
       try {
-        // OpenGeometry is deliberately not initialized here. It is not part of
-        // the current STEP -> OpenCascade -> Three.js rendering path.
-        await initializeOpenCascade()
-        if (disposed || version !== loadVersion) return
-
         const plinthUrl = plinthStepUrl(currentPlinthHeight)
         const cabinetUrl = cabinetStepUrl(currentWidth, currentDepth)
 
