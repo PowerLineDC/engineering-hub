@@ -27,9 +27,13 @@ function initOpenGeometry() {
   return openGeometryReady
 }
 
-function initOpenCascade() {
+async function initializeOpenCascade() {
   if (!openCascadeReady) {
-    openCascadeReady = initOpenCascade({
+    const init = initOpenCascade as unknown as (options: {
+      locateFile: () => string
+    }) => Promise<any>
+
+    openCascadeReady = init({
       locateFile: () => opencascadeWasm,
     }).then((oc) => {
       setOC(oc)
@@ -74,10 +78,6 @@ function createMeshFromReplicadShape(shape: any) {
   // DKC STEP dimensions are in millimetres; the configurator scene uses
   // 1 scene unit = 100 mm. Put the bottom of the imported part on grid Y=0.
   mesh.scale.setScalar(0.01)
-  const scaledBox = geometry.boundingBox?.clone().applyMatrix4(mesh.matrixWorld)
-  if (scaledBox) {
-    mesh.position.y -= scaledBox.min.y
-  }
 
   return mesh
 }
@@ -113,7 +113,7 @@ export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHe
     let importedPlinth: THREE.Mesh | null = null
     let cabinet: Cuboid | null = null
 
-    Promise.all([initOpenGeometry(), initOpenCascade()])
+    Promise.all([initOpenGeometry(), initializeOpenCascade()])
       .then(async () => {
         if (disposed) return
 
