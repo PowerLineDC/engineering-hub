@@ -7,7 +7,6 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 
 type OpenGeometryCadSceneProps = { width: number; height: number; depth: number; railCount: number; plinthHeight: number }
 type CadMeshTemplate = { geometry: THREE.BufferGeometry; material: THREE.MeshStandardMaterial }
-type DkcManifest = Record<string, string>
 
 const STEP_ROOT = '/library/dkc/Osnovnyye_elementy_korpusa_CQE_N/Osnovnie_elementi_korpusa_CQE%20N'
 const PLINTH_STEP_ROOT = `${STEP_ROOT}/R5NFPB_R5NBP/%D0%A3%D0%B3%D0%BB%D1%8B%20%D1%86%D0%BE%D0%BA%D0%BE%D0%BB%D1%8F%20R5NBP`
@@ -15,6 +14,7 @@ const BODY_STEP_ROOT = `${STEP_ROOT}/R5NKTB`
 function plinthStepUrl(plinthHeight: number) { return `${PLINTH_STEP_ROOT}/${plinthHeight === 200 ? 'R5NBP02B.STEP' : 'R5NBP01B.STEP'}` }
 function cabinetArticle(width: number, depth: number) { return `R5NKTB${width / 100}${depth / 100}(H=2000) изм` }
 function cabinetStepUrl(width: number, depth: number) { return `${BODY_STEP_ROOT}/${cabinetArticle(width, depth).replaceAll(' ', '%20')}.STEP` }
+function glbUrlFromStepUrl(stepUrl: string) { return stepUrl.replace(/\.STEP$/i, '.glb') }
 function glbKeyFromStepUrl(stepUrl: string) { const pathname = new URL(stepUrl, window.location.origin).pathname; const filename = decodeURIComponent(pathname.split('/').pop() ?? ''); return filename.replace(/\.step$/i, '') }
 
 const gltfLoader = new GLTFLoader()
@@ -23,44 +23,21 @@ dracoLoader.setDecoderPath('/draco/')
 gltfLoader.setDRACOLoader(dracoLoader)
 gltfLoader.setMeshoptDecoder(MeshoptDecoder)
 const glbCache = new Map<string, Promise<CadMeshTemplate>>()
-let manifestPromise: Promise<DkcManifest> | null = null
-
-async function loadDkcManifest(): Promise<DkcManifest> {
-  if (!manifestPromise) {
-    manifestPromise = fetch('/models/dkc/manifest.json', { cache: 'no-store' }).then(async (response) => {
-      if (!response.ok) throw new Error(`DKC GLB manifest unavailable: HTTP ${response.status}`)
-      const contentType = response.headers.get('content-type') ?? ''
-      const text = await response.text()
-      if (!contentType.includes('json') && text.trimStart().startsWith('<')) throw new Error('DKC GLB manifest is missing: server returned HTML instead of JSON')
-      return JSON.parse(text) as DkcManifest
-    })
-  }
-  return manifestPromise
-}
 
 async function loadGlbTemplate(stepUrl: string, label: string): Promise<CadMeshTemplate> {
   const key = glbKeyFromStepUrl(stepUrl)
   const cached = glbCache.get(key)
   if (cached) { console.log('[GLB cache] hit', label, key); return cached }
+  const glbUrl = glbUrlFromStepUrl(stepUrl)
   const loading = (async () => {
-    const manifest = await loadDkcManifest()
-    // The manifest is the authoritative mapping, but tolerate older manifests
-    // and regenerate-safe cases where the generated filename is deterministic.
-    // This also handles manifests created before all STEP files were present.
-    let glbUrl = manifest[key]
-    if (!glbUrl) {
-      const normalizedKey = key.normalize('NFC')
-      const manifestKey = Object.keys(manifest).find((candidate) => candidate.normalize('NFC') === normalizedKey)
-      glbUrl = manifestKey ? manifest[manifestKey] : `/models/dkc/${encodeURIComponent(key)}.glb`
-      console.warn('[GLB cache] manifest entry missing, trying deterministic GLB URL', { label, key, glbUrl })
-    }
     console.log('[GLB cache] loading Draco GLB', label, glbUrl)
     const response = await fetch(glbUrl, { cache: 'force-cache' })
     if (!response.ok) throw new Error(`${label}: GLB HTTP ${response.status} at ${glbUrl}`)
     const buffer = await response.arrayBuffer()
     const magic = new Uint8Array(buffer, 0, 4)
     if (magic[0] !== 0x67 || magic[1] !== 0x6c || magic[2] !== 0x54 || magic[3] !== 0x46) {
-      const text = new TextDecoder().decode(buffer.slice(0, 80)); throw new Error(`${label}: expected GLB but received ${response.headers.get('content-type') ?? 'unknown'}: ${text}`)
+      const text = new TextDecoder().decode(buffer.slice(0, 80))
+      throw new Error(`${label}: expected GLB but received ${response.headers.get('content-type') ?? 'unknown'}: ${text}`)
     }
     const gltf = await new Promise<THREE.GLTF>((resolve, reject) => gltfLoader.parse(buffer, '', resolve, reject))
     let sourceMesh: THREE.Mesh | null = null
