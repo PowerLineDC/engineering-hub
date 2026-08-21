@@ -18,6 +18,8 @@ type CadMeshTemplate = {
   material: THREE.MeshStandardMaterial
 }
 
+type DkcManifest = Record<string, string>
+
 const STEP_ROOT = '/library/dkc/Osnovnyye_elementy_korpusa_CQE_N/Osnovnie_elementi_korpusa_CQE%20N'
 const PLINTH_STEP_ROOT = `${STEP_ROOT}/R5NFPB_R5NBP/%D0%A3%D0%B3%D0%BB%D1%8B%20%D1%86%D0%BE%D0%BA%D0%BE%D0%BB%D1%8F%20R5NBP`
 const BODY_STEP_ROOT = `${STEP_ROOT}/R5NKTB`
@@ -35,11 +37,10 @@ function cabinetStepUrl(width: number, depth: number) {
   return `${BODY_STEP_ROOT}/${cabinetArticle(width, depth).replaceAll(' ', '%20')}.STEP`
 }
 
-function glbUrlFromStepUrl(stepUrl: string) {
+function glbKeyFromStepUrl(stepUrl: string) {
   const pathname = new URL(stepUrl, window.location.origin).pathname
   const filename = decodeURIComponent(pathname.split('/').pop() ?? '')
-  const base = filename.replace(/\.step$/i, '')
-  return `/models/dkc/${encodeURIComponent(base)}.glb`
+  return filename.replace(/\.step$/i, '')
 }
 
 const gltfLoader = new GLTFLoader()
@@ -49,18 +50,51 @@ gltfLoader.setDRACOLoader(dracoLoader)
 gltfLoader.setMeshoptDecoder(MeshoptDecoder)
 
 const glbCache = new Map<string, Promise<CadMeshTemplate>>()
+let manifestPromise: Promise<DkcManifest> | null = null
+
+async function loadDkcManifest(): Promise<DkcManifest> {
+  if (!manifestPromise) {
+    manifestPromise = fetch('/models/dkc/manifest.json', { cache: 'no-store' }).then(async (response) => {
+      if (!response.ok) throw new Error(`DKC GLB manifest unavailable: HTTP ${response.status}`)
+      const contentType = response.headers.get('content-type') ?? ''
+      const text = await response.text()
+      if (!contentType.includes('json') && text.trimStart().startsWith('<')) {
+        throw new Error('DKC GLB manifest is missing: server returned HTML instead of JSON')
+      }
+      return JSON.parse(text) as DkcManifest
+    })
+  }
+  return manifestPromise
+}
 
 async function loadGlbTemplate(stepUrl: string, label: string): Promise<CadMeshTemplate> {
-  const glbUrl = glbUrlFromStepUrl(stepUrl)
-  const cached = glbCache.get(glbUrl)
+  const key = glbKeyFromStepUrl(stepUrl)
+  const cached = glbCache.get(key)
   if (cached) {
-    console.log('[GLB cache] hit', label, glbUrl)
+    console.log('[GLB cache] hit', label, key)
     return cached
   }
 
   const loading = (async () => {
+    const manifest = await loadDkcManifest()
+    const glbUrl = manifest[key]
+    if (!glbUrl) {
+      throw new Error(`${label}: no generated GLB in manifest for ${key}`)
+    }
+
     console.log('[GLB cache] loading Draco GLB', label, glbUrl)
-    const gltf = await gltfLoader.loadAsync(glbUrl)
+    const response = await fetch(glbUrl, { cache: 'force-cache' })
+    if (!response.ok) throw new Error(`${label}: GLB HTTP ${response.status} at ${glbUrl}`)
+    const buffer = await response.arrayBuffer()
+    const magic = new Uint8Array(buffer, 0, 4)
+    if (magic[0] !== 0x67 || magic[1] !== 0x6c || magic[2] !== 0x54 || magic[3] !== 0x46) {
+      const text = new TextDecoder().decode(buffer.slice(0, 80))
+      throw new Error(`${label}: expected GLB but received ${response.headers.get('content-type') ?? 'unknown'}: ${text}`)
+    }
+
+    const gltf = await new Promise<THREE.GLTF>((resolve, reject) => {
+      gltfLoader.parse(buffer, '', resolve, reject)
+    })
     let sourceMesh: THREE.Mesh | null = null
 
     gltf.scene.traverse((object) => {
@@ -73,11 +107,7 @@ async function loadGlbTemplate(stepUrl: string, label: string): Promise<CadMeshT
     const sourceMaterial = Array.isArray(sourceMesh.material) ? sourceMesh.material[0] : sourceMesh.material
     const material = sourceMaterial instanceof THREE.MeshStandardMaterial
       ? sourceMaterial.clone()
-      : new THREE.MeshStandardMaterial({
-          color: 0x777777,
-          metalness: 0.15,
-          roughness: 0.7,
-        })
+      : new THREE.MeshStandardMaterial({ color: 0x777777, metalness: 0.15, roughness: 0.7 })
 
     geometry.computeBoundingBox()
     geometry.computeBoundingSphere()
@@ -85,11 +115,11 @@ async function loadGlbTemplate(stepUrl: string, label: string): Promise<CadMeshT
     return { geometry, material }
   })()
 
-  glbCache.set(glbUrl, loading)
+  glbCache.set(key, loading)
   try {
     return await loading
   } catch (error) {
-    glbCache.delete(glbUrl)
+    glbCache.delete(key)
     throw error
   }
 }
@@ -123,20 +153,16 @@ export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHe
 
     const scene = new THREE.Scene()
     scene.background = new THREE.Color('#101010')
-
     const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100)
     camera.position.set(4, 3.5, 4)
-
     const renderer = new THREE.WebGLRenderer({ antialias: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(container.clientWidth, container.clientHeight)
     container.appendChild(renderer.domElement)
-
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
     controls.target.set(0, 1.5, 0)
     controls.update()
-
     scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 2))
     const directional = new THREE.DirectionalLight(0xffffff, 2)
     directional.position.set(5, 10, 7)
@@ -146,88 +172,57 @@ export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHe
     const applyAssembly = async () => {
       const version = ++loadVersion
       const { width: currentWidth, depth: currentDepth, plinthHeight: currentPlinthHeight } = parametersRef.current
-
       try {
         const plinthUrl = plinthStepUrl(currentPlinthHeight)
         const cabinetUrl = cabinetStepUrl(currentWidth, currentDepth)
-
         const [plinthTemplate, cabinetTemplate] = await Promise.all([
           loadGlbTemplate(plinthUrl, `plinth ${currentPlinthHeight}`),
           loadGlbTemplate(cabinetUrl, `cabinet ${currentWidth}x${currentDepth}`),
         ])
-
         if (disposed || version !== loadVersion) return
-
         if (importedPlinth) scene.remove(importedPlinth)
         if (importedCabinet) scene.remove(importedCabinet)
-
-        importedPlinth = createMesh(
-          plinthTemplate,
-          currentPlinthHeight === 200 ? 'R5NBP02B' : 'R5NBP01B',
-        )
+        importedPlinth = createMesh(plinthTemplate, currentPlinthHeight === 200 ? 'R5NBP02B' : 'R5NBP01B')
         scene.add(importedPlinth)
-
         const plinthBox = new THREE.Box3().setFromObject(importedPlinth)
         importedPlinth.position.x -= (plinthBox.min.x + plinthBox.max.x) / 2
         importedPlinth.position.z -= (plinthBox.min.z + plinthBox.max.z) / 2
         importedPlinth.position.y -= plinthBox.min.y
-
-        importedCabinet = createMesh(
-          cabinetTemplate,
-          cabinetArticle(currentWidth, currentDepth),
-        )
+        importedCabinet = createMesh(cabinetTemplate, cabinetArticle(currentWidth, currentDepth))
         scene.add(importedCabinet)
-
         const cabinetBox = new THREE.Box3().setFromObject(importedCabinet)
         importedCabinet.position.x -= (cabinetBox.min.x + cabinetBox.max.x) / 2
         importedCabinet.position.z -= (cabinetBox.min.z + cabinetBox.max.z) / 2
         importedCabinet.position.y += plinthBox.max.y - cabinetBox.min.y
-
         console.log('[DKC] Cabinet assembly loaded from GLB', {
-          width: currentWidth,
-          depth: currentDepth,
-          plinthHeight: currentPlinthHeight,
+          width: currentWidth, depth: currentDepth, plinthHeight: currentPlinthHeight,
           railCount: parametersRef.current.railCount,
           cabinetArticle: cabinetArticle(currentWidth, currentDepth),
-          plinthSource: glbUrlFromStepUrl(plinthUrl),
-          cabinetSource: glbUrlFromStepUrl(cabinetUrl),
+          plinthSource: manifest[glbKeyFromStepUrl(plinthUrl)] ?? 'manifest',
+          cabinetSource: manifest[glbKeyFromStepUrl(cabinetUrl)] ?? 'manifest',
         })
       } catch (error) {
-        if (!disposed && version === loadVersion) {
-          console.error('[DKC] Cabinet assembly loading failed', error)
-        }
+        if (!disposed && version === loadVersion) console.error('[DKC] Cabinet assembly loading failed', error)
       }
     }
 
     const scheduleAssembly = () => {
       if (applyTimer) clearTimeout(applyTimer)
-      applyTimer = setTimeout(() => {
-        applyTimer = null
-        void applyAssembly()
-      }, 250)
+      applyTimer = setTimeout(() => { applyTimer = null; void applyAssembly() }, 250)
     }
-
     applyAssemblyRef.current = scheduleAssembly
     scheduleAssembly()
-
     const resize = () => {
       const aspect = container.clientWidth / Math.max(container.clientHeight, 1)
       camera.aspect = aspect
       camera.updateProjectionMatrix()
       renderer.setSize(container.clientWidth, container.clientHeight)
     }
-
     const resizeObserver = new ResizeObserver(resize)
     resizeObserver.observe(container)
-
     let frame = 0
-    const animate = () => {
-      frame = requestAnimationFrame(animate)
-      controls.update()
-      renderer.render(scene, camera)
-    }
+    const animate = () => { frame = requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera) }
     animate()
-
     return () => {
       disposed = true
       loadVersion += 1
