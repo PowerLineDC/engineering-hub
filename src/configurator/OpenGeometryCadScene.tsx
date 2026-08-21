@@ -43,11 +43,17 @@ async function initializeOpenCascade() {
   return openCascadeReady
 }
 
-const STEP_ROOT = '/library/dkc/Osnovnyye_elementy_korpusa_CQE_N/Osnovnie_elementi_korpusa_CQE%20N/R5NFPB_R5NBP/%D0%A3%D0%B3%D0%BB%D1%8B%20%D1%86%D0%BE%D0%BA%D0%BE%D0%BB%D1%8F%20R5NBP'
+const STEP_ROOT = '/library/dkc/Osnovnyye_elementy_korpusa_CQE_N/Osnovnie_elementi_korpusa_CQE%20N'
+const PLINTH_STEP_ROOT = `${STEP_ROOT}/R5NFPB_R5NBP/%D0%A3%D0%B3%D0%BB%D1%8B%20%D1%86%D0%BE%D0%BA%D0%BE%D0%BB%D1%8F%20R5NBP`
+const BODY_STEP_ROOT = `${STEP_ROOT}/R5NKTB`
 
 function plinthStepUrl(plinthHeight: number) {
   const article = plinthHeight === 200 ? 'R5NBP02B.STEP' : 'R5NBP01B.STEP'
-  return `${STEP_ROOT}/${article}`
+  return `${PLINTH_STEP_ROOT}/${article}`
+}
+
+function cabinetStepUrl(width: number, depth: number) {
+  return `${BODY_STEP_ROOT}/R5NKTB${width}${depth === 300 ? '3' : depth / 100}(H=2000)%20%D0%B8%D0%B7%D0%BC.STEP`
 }
 
 function createMeshFromReplicadShape(shape: any) {
@@ -76,7 +82,7 @@ function createMeshFromReplicadShape(shape: any) {
   )
 
   // DKC STEP dimensions are in millimetres; the configurator scene uses
-  // 1 scene unit = 100 mm. Put the bottom of the imported part on grid Y=0.
+  // 1 scene unit = 100 mm.
   mesh.scale.setScalar(0.01)
 
   return mesh
@@ -111,6 +117,7 @@ export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHe
     scene.add(new THREE.GridHelper(12, 24, 0x444444, 0x222222))
 
     let importedPlinth: THREE.Mesh | null = null
+    let importedCabinet: THREE.Mesh | null = null
     let cabinet: Cuboid | null = null
 
     Promise.all([initOpenGeometry(), initializeOpenCascade()])
@@ -128,34 +135,50 @@ export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHe
         cabinet.visible = false
         scene.add(cabinet)
 
-        const response = await fetch(plinthStepUrl(plinthHeight))
-        if (!response.ok) {
-          throw new Error(`STEP request failed: ${response.status} ${response.statusText}`)
+        const plinthResponse = await fetch(plinthStepUrl(plinthHeight))
+        if (!plinthResponse.ok) {
+          throw new Error(`Plinth STEP request failed: ${plinthResponse.status} ${plinthResponse.statusText}`)
         }
 
-        const blob = await response.blob()
-        importedPlinth = createMeshFromReplicadShape(await importSTEP(blob))
+        const plinthBlob = await plinthResponse.blob()
+        importedPlinth = createMeshFromReplicadShape(await importSTEP(plinthBlob))
         importedPlinth.name = plinthHeight === 200 ? 'R5NBP02B' : 'R5NBP01B'
         scene.add(importedPlinth)
 
-        const box = new THREE.Box3().setFromObject(importedPlinth)
-        importedPlinth.position.x -= (box.min.x + box.max.x) / 2
-        importedPlinth.position.z -= (box.min.z + box.max.z) / 2
-        importedPlinth.position.y -= box.min.y
+        const plinthBox = new THREE.Box3().setFromObject(importedPlinth)
+        importedPlinth.position.x -= (plinthBox.min.x + plinthBox.max.x) / 2
+        importedPlinth.position.z -= (plinthBox.min.z + plinthBox.max.z) / 2
+        importedPlinth.position.y -= plinthBox.min.y
+
+        const cabinetResponse = await fetch(cabinetStepUrl(width, depth))
+        if (!cabinetResponse.ok) {
+          throw new Error(`Cabinet STEP request failed: ${cabinetResponse.status} ${cabinetResponse.statusText}`)
+        }
+
+        const cabinetBlob = await cabinetResponse.blob()
+        importedCabinet = createMeshFromReplicadShape(await importSTEP(cabinetBlob))
+        importedCabinet.name = `R5NKTB${width}${depth === 300 ? '3' : depth / 100}(H=2000) изм`
+        scene.add(importedCabinet)
+
+        const cabinetBox = new THREE.Box3().setFromObject(importedCabinet)
+        importedCabinet.position.x -= (cabinetBox.min.x + cabinetBox.max.x) / 2
+        importedCabinet.position.z -= (cabinetBox.min.z + cabinetBox.max.z) / 2
+        importedCabinet.position.y += plinthBox.max.y - cabinetBox.min.y
 
         camera.position.set(4, 3.5, 4)
-        controls.target.set(0, 0.5, 0)
+        controls.target.set(0, 1.5, 0)
         controls.update()
 
-        console.log('[DKC] Plinth corner loaded', {
-          article: importedPlinth.name,
+        console.log('[DKC] Cabinet assembly loaded', {
+          width,
+          depth,
           plinthHeight,
-          source: plinthStepUrl(plinthHeight),
           railCount,
+          cabinetSource: cabinetStepUrl(width, depth),
         })
       })
       .catch((error) => {
-        console.error('[DKC] Plinth STEP loading failed', error)
+        console.error('[DKC] Cabinet assembly loading failed', error)
       })
 
     const resize = () => {
