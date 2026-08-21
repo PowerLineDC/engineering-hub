@@ -64,9 +64,6 @@ export function OpenGeometryConfigurator({ onClose }: { onClose: () => void }) {
                   <option value={200}>200 мм</option>
                 </select>
               </label>
-              <div className="og-configurator-status">
-                <div><span>Артикул</span><strong>{plinthHeight === 100 ? 'R5NBP01B' : 'R5NBP02B'}</strong></div>
-              </div>
             </section>
 
             <section className="og-configurator-status">
