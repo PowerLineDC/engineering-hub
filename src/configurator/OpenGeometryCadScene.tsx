@@ -85,14 +85,8 @@ async function loadStepTemplate(url: string, label: string): Promise<CadMeshTemp
     const data = shape.mesh({ tolerance: 0.05, angularTolerance: 30 })
     const geometry = new THREE.BufferGeometry()
 
-    geometry.setAttribute(
-      'position',
-      new THREE.Float32BufferAttribute(data.vertices, 3),
-    )
-    geometry.setAttribute(
-      'normal',
-      new THREE.Float32BufferAttribute(data.normals, 3),
-    )
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(data.vertices, 3))
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(data.normals, 3))
     geometry.setIndex(data.triangles)
     geometry.computeBoundingBox()
     geometry.computeBoundingSphere()
@@ -120,8 +114,6 @@ async function loadStepTemplate(url: string, label: string): Promise<CadMeshTemp
 function createMesh(template: CadMeshTemplate, name: string) {
   const mesh = new THREE.Mesh(template.geometry, template.material)
   mesh.name = name
-  // DKC STEP dimensions are in millimetres; the configurator scene uses
-  // 1 scene unit = 100 mm.
   mesh.scale.setScalar(0.01)
   return mesh
 }
@@ -144,6 +136,7 @@ export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHe
     let loadVersion = 0
     let importedPlinth: THREE.Mesh | null = null
     let importedCabinet: THREE.Mesh | null = null
+    let applyTimer: ReturnType<typeof setTimeout> | null = null
 
     const scene = new THREE.Scene()
     scene.background = new THREE.Color('#101010')
@@ -172,7 +165,9 @@ export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHe
       const { width: currentWidth, depth: currentDepth, plinthHeight: currentPlinthHeight } = parametersRef.current
 
       try {
-        await Promise.all([initOpenGeometry(), initializeOpenCascade()])
+        // OpenGeometry is deliberately not initialized here. It is not part of
+        // the current STEP -> OpenCascade -> Three.js rendering path.
+        await initializeOpenCascade()
         if (disposed || version !== loadVersion) return
 
         const plinthUrl = plinthStepUrl(currentPlinthHeight)
@@ -225,11 +220,16 @@ export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHe
       }
     }
 
-    applyAssemblyRef.current = () => {
-      void applyAssembly()
+    const scheduleAssembly = () => {
+      if (applyTimer) clearTimeout(applyTimer)
+      applyTimer = setTimeout(() => {
+        applyTimer = null
+        void applyAssembly()
+      }, 250)
     }
 
-    void applyAssembly()
+    applyAssemblyRef.current = scheduleAssembly
+    scheduleAssembly()
 
     const resize = () => {
       const aspect = container.clientWidth / Math.max(container.clientHeight, 1)
@@ -253,6 +253,7 @@ export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHe
       disposed = true
       loadVersion += 1
       applyAssemblyRef.current = null
+      if (applyTimer) clearTimeout(applyTimer)
       cancelAnimationFrame(frame)
       resizeObserver.disconnect()
       controls.dispose()
