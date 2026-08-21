@@ -30,11 +30,20 @@ function meshCacheUrl(stepUrl: string) {
 async function loadPreconvertedMesh(stepUrl: string) {
   const cacheUrl = meshCacheUrl(stepUrl)
   const response = await fetch(cacheUrl, { cache: 'force-cache' })
+
   if (!response.ok) return null
+
+  const contentType = response.headers.get('content-type') ?? ''
+  if (!contentType.includes('application/json')) {
+    console.warn('[STEP worker] mesh cache is not JSON, falling back to STEP', cacheUrl, contentType)
+    return null
+  }
+
   const payload = await response.json() as { vertices: number[]; normals: number[]; triangles: number[] }
   if (!Array.isArray(payload.vertices) || !Array.isArray(payload.normals) || !Array.isArray(payload.triangles)) {
     throw new Error(`Invalid mesh cache: ${cacheUrl}`)
   }
+
   return {
     vertices: new Float32Array(payload.vertices),
     normals: new Float32Array(payload.normals),
@@ -45,26 +54,41 @@ async function loadPreconvertedMesh(stepUrl: string) {
 
 self.onmessage = async (event: MessageEvent<RequestMessage>) => {
   const { id, url } = event.data
+
   try {
     const cached = await loadPreconvertedMesh(url)
     if (cached) {
       console.log('[STEP worker] mesh cache hit', cached.cacheUrl)
-      self.postMessage({ id, ok: true, vertices: cached.vertices, normals: cached.normals, triangles: cached.triangles } satisfies ResponseMessage, [cached.vertices.buffer, cached.normals.buffer, cached.triangles.buffer])
+      self.postMessage(
+        { id, ok: true, vertices: cached.vertices, normals: cached.normals, triangles: cached.triangles } satisfies ResponseMessage,
+        [cached.vertices.buffer, cached.normals.buffer, cached.triangles.buffer],
+      )
       return
     }
 
     console.log('[STEP worker] mesh cache miss, parsing STEP', url)
     await initializeOpenCascade()
+
     const response = await fetch(url)
     if (!response.ok) throw new Error(`STEP request failed: ${response.status} ${response.statusText}`)
+
     const blob = await response.blob()
     const shape = await importSTEP(blob)
     const data = shape.mesh({ tolerance: 0.05, angularTolerance: 30 })
+
     const vertices = new Float32Array(data.vertices)
     const normals = new Float32Array(data.normals)
     const triangles = new Uint32Array(data.triangles)
-    self.postMessage({ id, ok: true, vertices, normals, triangles } satisfies ResponseMessage, [vertices.buffer, normals.buffer, triangles.buffer])
+
+    self.postMessage(
+      { id, ok: true, vertices, normals, triangles } satisfies ResponseMessage,
+      [vertices.buffer, normals.buffer, triangles.buffer],
+    )
   } catch (error) {
-    self.postMessage({ id, ok: false, error: error instanceof Error ? error.message : String(error) } satisfies ResponseMessage)
+    self.postMessage({
+      id,
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    } satisfies ResponseMessage)
   }
 }
