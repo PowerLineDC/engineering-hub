@@ -19,6 +19,11 @@ export function OpenGeometryConfigurator({ onClose }: { onClose: () => void }) {
   const [depth, setDepth] = useState(DEFAULTS.depth)
   const [railCount, setRailCount] = useState(DEFAULTS.railCount)
   const [plinthHeight, setPlinthHeight] = useState(DEFAULTS.plinthHeight)
+  const [createdConfig, setCreatedConfig] = useState(DEFAULTS)
+
+  const handleCreate = () => {
+    setCreatedConfig({ width, height, depth, railCount, plinthHeight })
+  }
 
   return (
     <div className="og-configurator-overlay">
@@ -27,7 +32,7 @@ export function OpenGeometryConfigurator({ onClose }: { onClose: () => void }) {
           <div>
             <div className="og-configurator-kicker">Engineering Hub / Сборка щитов</div>
             <h2>Конфигуратор НКУ — OpenGeometry</h2>
-            <p>Параллельный прототип для сравнения CAD-ядра</p>
+            <p>Выберите параметры корпуса и нажмите «Создать»</p>
           </div>
           <button className="og-configurator-close" onClick={onClose} aria-label="Закрыть">✕</button>
         </header>
@@ -73,22 +78,26 @@ export function OpenGeometryConfigurator({ onClose }: { onClose: () => void }) {
               </label>
             </section>
 
+            <button className="og-configurator-create" type="button" onClick={handleCreate}>
+              Создать
+            </button>
+
             <section className="og-configurator-status">
               <div><span>CAD</span><strong>OpenGeometry</strong></div>
               <div><span>Runtime</span><strong>Rust + WebAssembly</strong></div>
-              <div><span>Режим</span><strong>Параметрический тест</strong></div>
+              <div><span>Режим</span><strong>Формирование модели</strong></div>
             </section>
           </aside>
 
           <main className="og-configurator-view">
             <OpenGeometryCadScene
-              width={width}
-              height={height}
-              depth={depth}
-              railCount={railCount}
-              plinthHeight={plinthHeight}
+              width={createdConfig.width}
+              height={createdConfig.height}
+              depth={createdConfig.depth}
+              railCount={createdConfig.railCount}
+              plinthHeight={createdConfig.plinthHeight}
             />
-            <div className="og-cad-hint">Тест OpenGeometry · ЛКМ — вращение · колёсико — масштаб · ПКМ — панорамирование</div>
+            <div className="og-cad-hint">Выберите параметры и нажмите «Создать» · ЛКМ — вращение · колёсико — масштаб · ПКМ — панорамирование</div>
           </main>
         </div>
       </div>
