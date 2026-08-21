@@ -7,6 +7,7 @@ const DEFAULTS = {
   height: 600,
   depth: 300,
   railCount: 4,
+  plinthHeight: 100,
 }
 
 export function OpenGeometryConfigurator({ onClose }: { onClose: () => void }) {
@@ -14,6 +15,7 @@ export function OpenGeometryConfigurator({ onClose }: { onClose: () => void }) {
   const [height, setHeight] = useState(DEFAULTS.height)
   const [depth, setDepth] = useState(DEFAULTS.depth)
   const [railCount, setRailCount] = useState(DEFAULTS.railCount)
+  const [plinthHeight, setPlinthHeight] = useState(DEFAULTS.plinthHeight)
 
   return (
     <div className="og-configurator-overlay">
@@ -53,6 +55,20 @@ export function OpenGeometryConfigurator({ onClose }: { onClose: () => void }) {
               </label>
             </section>
 
+            <section>
+              <h3>Цоколь</h3>
+              <label>
+                Высота цоколя
+                <select value={plinthHeight} onChange={(e) => setPlinthHeight(Number(e.target.value))}>
+                  <option value={100}>100 мм</option>
+                  <option value={200}>200 мм</option>
+                </select>
+              </label>
+              <div className="og-configurator-status">
+                <div><span>Артикул</span><strong>{plinthHeight === 100 ? 'R5NBP01B' : 'R5NBP02B'}</strong></div>
+              </div>
+            </section>
+
             <section className="og-configurator-status">
               <div><span>CAD</span><strong>OpenGeometry</strong></div>
               <div><span>Runtime</span><strong>Rust + WebAssembly</strong></div>
@@ -61,7 +77,13 @@ export function OpenGeometryConfigurator({ onClose }: { onClose: () => void }) {
           </aside>
 
           <main className="og-configurator-view">
-            <OpenGeometryCadScene width={width} height={height} depth={depth} railCount={railCount} />
+            <OpenGeometryCadScene
+              width={width}
+              height={height}
+              depth={depth}
+              railCount={railCount}
+              plinthHeight={plinthHeight}
+            />
             <div className="og-cad-hint">Тест OpenGeometry · ЛКМ — вращение · колёсико — масштаб · ПКМ — панорамирование</div>
           </main>
         </div>
