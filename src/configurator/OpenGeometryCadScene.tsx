@@ -52,8 +52,12 @@ function plinthStepUrl(plinthHeight: number) {
   return `${PLINTH_STEP_ROOT}/${article}`
 }
 
+function cabinetArticle(width: number, depth: number) {
+  return `R5NKTB${width / 100}${depth / 100}(H=2000) изм`
+}
+
 function cabinetStepUrl(width: number, depth: number) {
-  return `${BODY_STEP_ROOT}/R5NKTB${width}${depth === 300 ? '3' : depth / 100}(H=2000)%20%D0%B8%D0%B7%D0%BC.STEP`
+  return `${BODY_STEP_ROOT}/${cabinetArticle(width, depth).replaceAll(' ', '%20')}.STEP`
 }
 
 function createMeshFromReplicadShape(shape: any) {
@@ -157,7 +161,7 @@ export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHe
 
         const cabinetBlob = await cabinetResponse.blob()
         importedCabinet = createMeshFromReplicadShape(await importSTEP(cabinetBlob))
-        importedCabinet.name = `R5NKTB${width}${depth === 300 ? '3' : depth / 100}(H=2000) изм`
+        importedCabinet.name = cabinetArticle(width, depth)
         scene.add(importedCabinet)
 
         const cabinetBox = new THREE.Box3().setFromObject(importedCabinet)
@@ -174,6 +178,7 @@ export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHe
           depth,
           plinthHeight,
           railCount,
+          cabinetArticle: cabinetArticle(width, depth),
           cabinetSource: cabinetStepUrl(width, depth),
         })
       })
