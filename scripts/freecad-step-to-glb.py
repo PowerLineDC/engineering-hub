@@ -1,4 +1,3 @@
-import sys
 import os
 import FreeCAD
 import Part
@@ -6,12 +5,15 @@ import Mesh
 
 
 def main():
-    if len(sys.argv) != 3:
-        print("Usage: FreeCADCmd <script> <input.step> <output.stl>")
+    source = os.environ.get("ENGINEERINGHUB_STEP_INPUT")
+    output = os.environ.get("ENGINEERINGHUB_MESH_OUTPUT")
+
+    if not source or not output:
+        print("Usage: FreeCADCmd -c \"exec(open(script).read())\" with ENGINEERINGHUB_STEP_INPUT and ENGINEERINGHUB_MESH_OUTPUT set")
         return 2
 
-    source = os.path.abspath(sys.argv[1])
-    output = os.path.abspath(sys.argv[2])
+    source = os.path.abspath(source)
+    output = os.path.abspath(output)
     print(f"[FreeCAD] STEP -> mesh: {source}")
 
     doc = None
