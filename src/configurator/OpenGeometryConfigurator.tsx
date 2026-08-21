@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { OpenGeometryCadScene } from './OpenGeometryCadScene'
 import './OpenGeometryConfigurator.css'
 
+const WIDTH_OPTIONS = [300, 400, 500, 600, 800, 1000, 1200, 1400, 1600]
+const DEPTH_OPTIONS = [300, 400, 500, 600, 800, 1000, 1200]
+
 const DEFAULTS = {
   width: 800,
   height: 600,
@@ -35,7 +38,9 @@ export function OpenGeometryConfigurator({ onClose }: { onClose: () => void }) {
               <h3>Корпус</h3>
               <label>
                 Ширина, мм
-                <input type="number" min="200" max="2000" step="10" value={width} onChange={(e) => setWidth(Number(e.target.value))} />
+                <select value={width} onChange={(e) => setWidth(Number(e.target.value))}>
+                  {WIDTH_OPTIONS.map((value) => <option key={value} value={value}>{value} мм</option>)}
+                </select>
               </label>
               <label>
                 Высота, мм
@@ -43,7 +48,9 @@ export function OpenGeometryConfigurator({ onClose }: { onClose: () => void }) {
               </label>
               <label>
                 Глубина, мм
-                <input type="number" min="100" max="1200" step="10" value={depth} onChange={(e) => setDepth(Number(e.target.value))} />
+                <select value={depth} onChange={(e) => setDepth(Number(e.target.value))}>
+                  {DEPTH_OPTIONS.map((value) => <option key={value} value={value}>{value} мм</option>)}
+                </select>
               </label>
             </section>
 
