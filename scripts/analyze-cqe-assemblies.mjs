@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -21,6 +21,29 @@ function findFreeCad() {
   return null
 }
 
+function runFreeCad(freecad, env) {
+  return new Promise((resolve, reject) => {
+    // FreeCADCmd is documented to execute a Python script passed as a file.
+    // The analyzer has an unconditional main(), which also works around the
+    // FreeCAD 1.1 import-vs-__main__ behavior.
+    const child = spawn(freecad, [analyzerScript], {
+      cwd: root,
+      env,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+
+    child.stdout.on('data', chunk => process.stdout.write(chunk))
+    child.stderr.on('data', chunk => process.stderr.write(chunk))
+    child.on('error', reject)
+    child.on('close', (code, signal) => {
+      if (signal) reject(new Error(`FreeCAD terminated by signal ${signal}`))
+      else if (code !== 0) reject(new Error(`FreeCAD exited with code ${code}`))
+      else resolve()
+    })
+  })
+}
+
 async function main() {
   const freecad = findFreeCad()
   if (!freecad) throw new Error('FreeCADCmd was not found')
@@ -37,28 +60,11 @@ async function main() {
 
   console.log(`[CQE analysis] FreeCADCmd: ${freecad}`)
   console.log(`[CQE analysis] STEP assemblies: ${files.length}`)
-  console.log('[CQE analysis] Starting FreeCAD Python execution...')
+  console.log(`[CQE analysis] Analyzer: ${analyzerScript}`)
+  console.log('[CQE analysis] Starting FreeCAD analysis...')
+  console.log('[CQE analysis] Live output follows:')
 
-  // FreeCAD 1.1.x has an import-style implementation for positional .py files.
-  // Do not use that path. Start console mode, execute the analyzer explicitly,
-  // then close stdin. Closing stdin is important: without it FreeCAD waits for
-  // interactive input forever.
-  const scriptLiteral = JSON.stringify(analyzerScript)
-  const code = `exec(compile(open(${scriptLiteral}, 'r', encoding='utf-8').read(), ${scriptLiteral}, 'exec'))`
-
-  const result = spawnSync(freecad, ['-c', code], {
-    input: '',
-    cwd: root,
-    encoding: 'utf8',
-    windowsHide: true,
-    maxBuffer: 64 * 1024 * 1024,
-    env,
-  })
-
-  if (result.stdout) process.stdout.write(result.stdout)
-  if (result.stderr) process.stderr.write(result.stderr)
-  if (result.error) throw result.error
-  if (result.status !== 0) throw new Error(`FreeCAD exited with code ${result.status ?? 'unknown'}`)
+  await runFreeCad(freecad, env)
 
   const stat = await fs.stat(output).catch(() => null)
   if (!stat || stat.size < 10) throw new Error(`FreeCAD finished successfully, but the analysis file was not created: ${output}`)
