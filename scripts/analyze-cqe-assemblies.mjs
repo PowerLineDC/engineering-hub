@@ -77,10 +77,13 @@ async function main() {
   console.log(`[CQE analysis] Output: ${output}`)
   console.log('[CQE analysis] Starting FreeCAD analysis...')
 
-  // Pass the Python file directly to FreeCADCmd. The previous implementation
-  // used `-c exec(...)`; on some FreeCAD Windows builds that command exits
-  // without actually executing the supplied Python source.
-  const result = spawnSync(freecad, [analyzerScript], {
+  // FreeCADCmd on Windows does not reliably execute a .py file passed as a
+  // positional argument. Run the analyzer through FreeCAD's -c interpreter.
+  // The script path is JSON-escaped so spaces and Cyrillic characters are safe.
+  const scriptLiteral = JSON.stringify(analyzerScript)
+  const command = `exec(compile(open(${scriptLiteral}, 'r', encoding='utf-8').read(), ${scriptLiteral}, 'exec'))`
+
+  const result = spawnSync(freecad, ['-c', command], {
     encoding: 'utf8',
     windowsHide: true,
     maxBuffer: 64 * 1024 * 1024,
@@ -94,8 +97,6 @@ async function main() {
     throw new Error(`FreeCAD exited with code ${result.status ?? 'unknown'}`)
   }
 
-  // Do not report success merely because FreeCAD exited with code 0.
-  // Verify that the requested artifact was actually written and is non-empty.
   let stat
   try {
     stat = await fs.stat(output)
