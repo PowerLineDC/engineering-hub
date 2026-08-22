@@ -3,12 +3,13 @@ import { OpenGeometryCadScene } from './OpenGeometryCadScene'
 import './OpenGeometryConfigurator.css'
 
 const WIDTH_OPTIONS = [300, 400, 500, 600, 800, 1000, 1200, 1400, 1600]
+const HEIGHT_OPTIONS = [1000, 1200, 1400, 1600, 1800, 2000, 2200]
 const DEPTH_OPTIONS = [300, 400, 500, 600, 800, 1000, 1200]
 
 const DEFAULTS = {
   width: 800,
-  height: 600,
-  depth: 300,
+  height: 1400,
+  depth: 400,
   railCount: 4,
   plinthHeight: 100,
 }
@@ -49,7 +50,9 @@ export function OpenGeometryConfigurator({ onClose }: { onClose: () => void }) {
               </label>
               <label>
                 Высота, мм
-                <input type="number" min="200" max="2500" step="10" value={height} onChange={(e) => setHeight(Number(e.target.value))} />
+                <select value={height} onChange={(e) => setHeight(Number(e.target.value))}>
+                  {HEIGHT_OPTIONS.map((value) => <option key={value} value={value}>{value} мм</option>)}
+                </select>
               </label>
               <label>
                 Глубина, мм
