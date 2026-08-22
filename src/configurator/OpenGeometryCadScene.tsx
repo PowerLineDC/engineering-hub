@@ -10,10 +10,10 @@ type CadMeshTemplate = { geometry: THREE.BufferGeometry; material: THREE.MeshSta
 
 const STEP_ROOT = '/library/dkc/Osnovnyye_elementy_korpusa_CQE_N/Osnovnie_elementi_korpusa_CQE%20N'
 const PLINTH_STEP_ROOT = `${STEP_ROOT}/R5NFPB_R5NBP/%D0%A3%D0%B3%D0%BB%D1%8B%20%D1%86%D0%BE%D0%BA%D0%BE%D0%BB%D1%8F%20R5NBP`
-const BODY_STEP_ROOT = `${STEP_ROOT}/R5NKTB`
+const NEW_GLB_TEST_ROOT = `${STEP_ROOT}/R5NPCE`
 function plinthStepUrl(plinthHeight: number) { return `${PLINTH_STEP_ROOT}/${plinthHeight === 200 ? 'R5NBP02B.STEP' : 'R5NBP01B.STEP'}` }
-function cabinetArticle(width: number, depth: number) { return `R5NKTB${width / 100}${depth / 100}(H=2000) изм` }
-function cabinetStepUrl(width: number, depth: number) { return `${BODY_STEP_ROOT}/${cabinetArticle(width, depth).replaceAll(' ', '%20')}.STEP` }
+function cabinetArticle(_width: number, _depth: number) { return 'R5NPCE2230' }
+function cabinetStepUrl(_width: number, _depth: number) { return `${NEW_GLB_TEST_ROOT}/R5NPCE2230.STEP` }
 function glbUrlFromStepUrl(stepUrl: string) { return stepUrl.replace(/\.STEP$/i, '.glb') }
 function glbKeyFromStepUrl(stepUrl: string) { const pathname = new URL(stepUrl, window.location.origin).pathname; const filename = decodeURIComponent(pathname.split('/').pop() ?? ''); return filename.replace(/\.step$/i, '') }
 
@@ -73,14 +73,14 @@ export function OpenGeometryCadScene({ width, height, depth, railCount, plinthHe
       const version = ++loadVersion; const { width: currentWidth, depth: currentDepth, plinthHeight: currentPlinthHeight } = parametersRef.current
       try {
         const plinthUrl = plinthStepUrl(currentPlinthHeight); const cabinetUrl = cabinetStepUrl(currentWidth, currentDepth)
-        const [plinthTemplate, cabinetTemplate] = await Promise.all([loadGlbTemplate(plinthUrl, `plinth ${currentPlinthHeight}`), loadGlbTemplate(cabinetUrl, `cabinet ${currentWidth}x${currentDepth}`)])
+        const [plinthTemplate, cabinetTemplate] = await Promise.all([loadGlbTemplate(plinthUrl, `plinth ${currentPlinthHeight}`), loadGlbTemplate(cabinetUrl, `NEW DKC GLB test ${currentWidth}x${currentDepth}`)])
         if (disposed || version !== loadVersion) return
         if (importedPlinth) scene.remove(importedPlinth); if (importedCabinet) scene.remove(importedCabinet)
         importedPlinth = createMesh(plinthTemplate, currentPlinthHeight === 200 ? 'R5NBP02B' : 'R5NBP01B'); scene.add(importedPlinth)
         const plinthBox = new THREE.Box3().setFromObject(importedPlinth); importedPlinth.position.x -= (plinthBox.min.x + plinthBox.max.x) / 2; importedPlinth.position.z -= (plinthBox.min.z + plinthBox.max.z) / 2; importedPlinth.position.y -= plinthBox.min.y
         importedCabinet = createMesh(cabinetTemplate, cabinetArticle(currentWidth, currentDepth)); scene.add(importedCabinet)
         const cabinetBox = new THREE.Box3().setFromObject(importedCabinet); importedCabinet.position.x -= (cabinetBox.min.x + cabinetBox.max.x) / 2; importedCabinet.position.z -= (cabinetBox.min.z + cabinetBox.max.z) / 2; importedCabinet.position.y += plinthBox.max.y - cabinetBox.min.y
-        console.log('[DKC] Cabinet assembly loaded from GLB', { width: currentWidth, depth: currentDepth, plinthHeight: currentPlinthHeight, railCount: parametersRef.current.railCount, cabinetArticle: cabinetArticle(currentWidth, currentDepth), plinthSource: glbKeyFromStepUrl(plinthUrl), cabinetSource: glbKeyFromStepUrl(cabinetUrl) })
+        console.log('[DKC] Cabinet assembly loaded from NEW GLB', { width: currentWidth, depth: currentDepth, plinthHeight: currentPlinthHeight, railCount: parametersRef.current.railCount, cabinetArticle: cabinetArticle(currentWidth, currentDepth), plinthSource: glbKeyFromStepUrl(plinthUrl), cabinetSource: glbKeyFromStepUrl(cabinetUrl) })
       } catch (error) { if (!disposed && version === loadVersion) console.error('[DKC] Cabinet assembly loading failed', error) }
     }
     const scheduleAssembly = () => { if (applyTimer) clearTimeout(applyTimer); applyTimer = setTimeout(() => { applyTimer = null; void applyAssembly() }, 250) }
