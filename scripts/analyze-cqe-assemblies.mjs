@@ -77,13 +77,11 @@ async function main() {
   console.log(`[CQE analysis] Output: ${output}`)
   console.log('[CQE analysis] Starting FreeCAD analysis...')
 
-  // FreeCADCmd on Windows does not reliably execute a .py file passed as a
-  // positional argument. Run the analyzer through FreeCAD's -c interpreter.
-  // The script path is JSON-escaped so spaces and Cyrillic characters are safe.
-  const scriptLiteral = JSON.stringify(analyzerScript)
-  const command = `exec(compile(open(${scriptLiteral}, 'r', encoding='utf-8').read(), ${scriptLiteral}, 'exec'))`
-
-  const result = spawnSync(freecad, ['-c', command], {
+  // Do not use FreeCADCmd -c here. -c starts FreeCAD's interactive console,
+  // so spawnSync waits for stdin and the analyzer appears to hang after startup.
+  // FreeCADCmd accepts a Python script as a positional argument and exits when
+  // that script finishes.
+  const result = spawnSync(freecad, [analyzerScript], {
     encoding: 'utf8',
     windowsHide: true,
     maxBuffer: 64 * 1024 * 1024,
