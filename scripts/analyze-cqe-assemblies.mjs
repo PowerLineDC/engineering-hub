@@ -7,7 +7,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(__dirname, '..')
 const assemblyRoot = path.join(root, 'public', 'library', 'dkc', 'Osnovnyye_elementy_korpusa_CQE_N', 'Собранные корпуса CQE N со сплошной дверью')
 const analyzerScript = path.join(__dirname, 'freecad-analyze-cqe-assemblies.py')
-const runnerScript = path.join(__dirname, 'freecad-run-cqe-analysis.py')
 const output = path.join(assemblyRoot, 'cqe-assembly-analysis.json')
 
 function findFreeCad() {
@@ -26,7 +25,6 @@ async function main() {
   const freecad = findFreeCad()
   if (!freecad) throw new Error('FreeCADCmd was not found')
   await fs.access(analyzerScript)
-  await fs.access(runnerScript)
   const entries = await fs.readdir(assemblyRoot, { withFileTypes: true })
   const files = entries.filter(e => e.isFile() && /\.(step|stp)$/i.test(e.name))
   if (!files.length) throw new Error(`No STEP/STP assembly files found in ${assemblyRoot}`)
@@ -35,17 +33,21 @@ async function main() {
     ...process.env,
     ENGINEERINGHUB_CQE_ASSEMBLY_ROOT: assemblyRoot,
     ENGINEERINGHUB_CQE_ANALYSIS_OUTPUT: output,
-    ENGINEERINGHUB_CQE_ANALYZER_SCRIPT: analyzerScript,
   }
 
   console.log(`[CQE analysis] FreeCADCmd: ${freecad}`)
   console.log(`[CQE analysis] STEP assemblies: ${files.length}`)
-  console.log(`[CQE analysis] Starting dedicated FreeCAD runner...`)
+  console.log('[CQE analysis] Starting FreeCAD Python execution...')
 
-  // FreeCAD 1.1 does not reliably execute a positional Python file as __main__.
-  // The dedicated runner is passed as the positional script and invokes the
-  // actual analyzer with runpy.run_path(..., run_name='__main__').
-  const result = spawnSync(freecad, [runnerScript], {
+  // FreeCAD 1.1.x has an import-style implementation for positional .py files.
+  // Do not use that path. Start console mode, execute the analyzer explicitly,
+  // then close stdin. Closing stdin is important: without it FreeCAD waits for
+  // interactive input forever.
+  const scriptLiteral = JSON.stringify(analyzerScript)
+  const code = `exec(compile(open(${scriptLiteral}, 'r', encoding='utf-8').read(), ${scriptLiteral}, 'exec'))`
+
+  const result = spawnSync(freecad, ['-c', code], {
+    input: '',
     cwd: root,
     encoding: 'utf8',
     windowsHide: true,
