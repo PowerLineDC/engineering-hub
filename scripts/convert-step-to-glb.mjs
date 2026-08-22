@@ -19,6 +19,8 @@ function findFreeCad() {
 
   const candidates = process.platform === 'win32'
     ? [
+        'D:\\программы\\FreeCAD\\FreeCAD_1.1.3-Windows-x86_64-py311\\bin\\FreeCADCmd.exe',
+        'C:\\Program Files\\FreeCAD 1.1\\bin\\FreeCADCmd.exe',
         'C:\\Program Files\\FreeCAD 1.0\\bin\\FreeCADCmd.exe',
         'C:\\Program Files\\FreeCAD 0.21\\bin\\FreeCADCmd.exe',
         'C:\\Program Files\\FreeCAD 0.20\\bin\\FreeCADCmd.exe',
@@ -84,8 +86,10 @@ function runFreeCad(freecad, input, output) {
   })
   if (result.stdout) process.stdout.write(result.stdout)
   if (result.stderr) process.stderr.write(result.stderr)
+  if (result.error) throw result.error
   if (result.status !== 0) {
-    throw new Error(`FreeCAD exited with code ${result.status ?? 'unknown'}`)
+    const signal = result.signal ? `, signal ${result.signal}` : ''
+    throw new Error(`FreeCAD exited with code ${result.status ?? 'unknown'}${signal}`)
   }
 }
 
