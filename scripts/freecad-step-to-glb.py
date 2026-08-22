@@ -1,7 +1,7 @@
 import os
 import FreeCAD
 import Part
-import Mesh
+import Import
 
 
 def main():
@@ -14,28 +14,33 @@ def main():
 
     source = os.path.abspath(source)
     output = os.path.abspath(output)
-    print(f"[FreeCAD] STEP -> mesh: {source}")
+    print(f"[FreeCAD] STEP -> GLB: {source}", flush=True)
 
     doc = None
     try:
         doc = FreeCAD.newDocument("STEPImport")
-        shape = Part.Shape()
-        shape.read(source)
 
-        if shape.isNull():
-            raise RuntimeError("FreeCAD could not read STEP geometry")
-
-        obj = doc.addObject("Part::Feature", "STEP")
-        obj.Shape = shape
+        # Part.Shape.read() is not the STEP importer. Use FreeCAD's Import
+        # module so STEP files are parsed through the normal STEP importer.
+        Import.insert(source, doc.Name)
         doc.recompute()
 
+        objects = [obj for obj in doc.Objects if hasattr(obj, "Shape") and not obj.Shape.isNull()]
+        if not objects:
+            raise RuntimeError("FreeCAD imported no STEP shapes")
+
+        # FreeCADCmd is headless, so there is no GUI view provider to create
+        # triangulation data automatically. The glTF exporter needs that data.
+        for obj in objects:
+            obj.Shape.tessellate(0.1)
+
         os.makedirs(os.path.dirname(output), exist_ok=True)
-        Mesh.export([obj], output)
+        Import.export(objects, output)
 
         if not os.path.isfile(output) or os.path.getsize(output) == 0:
-            raise RuntimeError("FreeCAD did not create a mesh file")
+            raise RuntimeError("FreeCAD did not create a GLB file")
 
-        print(f"[FreeCAD] wrote {output} ({os.path.getsize(output)} bytes)")
+        print(f"[FreeCAD] wrote {output} ({os.path.getsize(output)} bytes)", flush=True)
         return 0
     finally:
         if doc is not None:
