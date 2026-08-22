@@ -77,11 +77,13 @@ async function main() {
   console.log(`[CQE analysis] Output: ${output}`)
   console.log('[CQE analysis] Starting FreeCAD analysis...')
 
-  // Do not use FreeCADCmd -c here. -c starts FreeCAD's interactive console,
-  // so spawnSync waits for stdin and the analyzer appears to hang after startup.
-  // FreeCADCmd accepts a Python script as a positional argument and exits when
-  // that script finishes.
-  const result = spawnSync(freecad, [analyzerScript], {
+  // FreeCAD 1.1 imports a .py positional argument as a module, so a normal
+  // __main__ guard is not executed. Pass a Python code string instead. This
+  // executes the analyzer directly without entering the interactive console.
+  const quotedScript = JSON.stringify(analyzerScript)
+  const pythonCode = `exec(compile(open(${quotedScript}, encoding='utf-8').read(), ${quotedScript}, 'exec'))`
+
+  const result = spawnSync(freecad, [pythonCode], {
     encoding: 'utf8',
     windowsHide: true,
     maxBuffer: 64 * 1024 * 1024,
