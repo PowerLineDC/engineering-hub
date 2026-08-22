@@ -14,6 +14,7 @@ const assemblyRoot = path.join(
   'Собранные корпуса CQE N со сплошной дверью',
 )
 const analyzerScript = path.join(__dirname, 'freecad-analyze-cqe-assemblies.py')
+const output = path.join(assemblyRoot, 'cqe-assembly-analysis.json')
 
 function findFreeCad() {
   if (process.env.FREECAD_CMD) return process.env.FREECAD_CMD
@@ -29,9 +30,13 @@ function findFreeCad() {
     : ['/usr/bin/FreeCADCmd', '/usr/local/bin/FreeCADCmd', '/usr/bin/freecadcmd']
 
   for (const candidate of candidates) {
-    const result = spawnSync(process.platform === 'win32' ? 'cmd.exe' : 'test', process.platform === 'win32'
-      ? ['/c', 'if', 'exist', candidate, 'exit', '0', 'else', 'exit', '1']
-      : ['-x', candidate], { windowsHide: true })
+    const result = spawnSync(
+      process.platform === 'win32' ? 'cmd.exe' : 'test',
+      process.platform === 'win32'
+        ? ['/c', 'if', 'exist', candidate, 'exit', '0', 'else', 'exit', '1']
+        : ['-x', candidate],
+      { windowsHide: true },
+    )
     if (result.status === 0) return candidate
   }
 
@@ -61,15 +66,21 @@ async function main() {
 
   if (!files.length) throw new Error(`No STEP/STP assembly files found in ${assemblyRoot}`)
 
-  const output = path.join(assemblyRoot, 'cqe-assembly-analysis.json')
-  const env = { ...process.env, ENGINEERINGHUB_CQE_ASSEMBLY_ROOT: assemblyRoot, ENGINEERINGHUB_CQE_ANALYSIS_OUTPUT: output }
-  const command = `exec(open(${JSON.stringify(analyzerScript.replace(/\\/g, '/'))}, encoding='utf-8').read())`
+  const env = {
+    ...process.env,
+    ENGINEERINGHUB_CQE_ASSEMBLY_ROOT: assemblyRoot,
+    ENGINEERINGHUB_CQE_ANALYSIS_OUTPUT: output,
+  }
 
   console.log(`[CQE analysis] FreeCADCmd: ${freecad}`)
   console.log(`[CQE analysis] STEP assemblies: ${files.length}`)
   console.log(`[CQE analysis] Output: ${output}`)
+  console.log('[CQE analysis] Starting FreeCAD analysis...')
 
-  const result = spawnSync(freecad, ['-c', command], {
+  // Pass the Python file directly to FreeCADCmd. The previous implementation
+  // used `-c exec(...)`; on some FreeCAD Windows builds that command exits
+  // without actually executing the supplied Python source.
+  const result = spawnSync(freecad, [analyzerScript], {
     encoding: 'utf8',
     windowsHide: true,
     maxBuffer: 64 * 1024 * 1024,
@@ -79,13 +90,28 @@ async function main() {
   if (result.stdout) process.stdout.write(result.stdout)
   if (result.stderr) process.stderr.write(result.stderr)
   if (result.error) throw result.error
-  if (result.status !== 0) throw new Error(`FreeCAD exited with code ${result.status ?? 'unknown'}`)
+  if (result.status !== 0) {
+    throw new Error(`FreeCAD exited with code ${result.status ?? 'unknown'}`)
+  }
 
-  const stat = await fs.stat(output)
+  // Do not report success merely because FreeCAD exited with code 0.
+  // Verify that the requested artifact was actually written and is non-empty.
+  let stat
+  try {
+    stat = await fs.stat(output)
+  } catch {
+    throw new Error(`FreeCAD finished successfully, but the analysis file was not created: ${output}`)
+  }
+
+  if (!stat.isFile() || stat.size < 10) {
+    throw new Error(`Analysis file was created but is empty or invalid: ${output}`)
+  }
+
   console.log(`[CQE analysis] Done: ${stat.size} bytes`)
+  console.log(`[CQE analysis] Saved: ${output}`)
 }
 
 main().catch((error) => {
-  console.error(error)
+  console.error('[CQE analysis] FAILED:', error)
   process.exitCode = 1
 })
