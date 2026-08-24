@@ -28,6 +28,7 @@ type LoadModel = (selectedHeight: number, firstLoad?: boolean) => Promise<void>
 function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const loadModelRef = useRef<LoadModel | null>(null)
+  const lastRequestedHeightRef = useRef<number | null>(null)
   const [height, setHeight] = useState(2000)
   const [geometry, setGeometry] = useState<CadGeometry | null>(null)
   const [loading, setLoading] = useState(false)
@@ -36,7 +37,6 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     const viewport = viewportRef.current
     if (!viewport) return
-
     let cancelled = false
     let currentModel: THREE.Object3D | null = null
     let animationFrame = 0
@@ -63,9 +63,7 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
     transform.setSpace('world')
     transform.setSize(0.8)
     transform.setTranslationSnap(1)
-    transform.addEventListener('dragging-changed', (event) => {
-      controls.enabled = !event.value
-    })
+    transform.addEventListener('dragging-changed', (event) => { controls.enabled = !event.value })
     scene.add(transform.getHelper())
 
     const raycaster = new THREE.Raycaster()
@@ -82,6 +80,7 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
     }
 
     const loadModel: LoadModel = async (selectedHeight, firstLoad = false) => {
+      lastRequestedHeightRef.current = selectedHeight
       setLoading(true)
       setError(null)
       transform.detach()
@@ -89,14 +88,9 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
         const stepUrl = STEP_FOR_HEIGHT[selectedHeight]
         const response = await fetch(`/api/cad/load?step=${encodeURIComponent(stepUrl)}`)
         const data = await response.json() as CadGeometry & { error?: string; details?: string }
-        if (!response.ok || data.error) {
-          throw new Error(data.details ? `${data.error}: ${data.details}` : data.error || `CAD server error: ${response.status}`)
-        }
+        if (!response.ok || data.error) throw new Error(data.details ? `${data.error}: ${data.details}` : data.error || `CAD server error: ${response.status}`)
         const object = await new OBJLoader().loadAsync(data.modelUrl)
-        if (cancelled) {
-          disposeModel(object)
-          return
-        }
+        if (cancelled) { disposeModel(object); return }
 
         const box = new THREE.Box3().setFromObject(object)
         const center = box.getCenter(new THREE.Vector3())
@@ -178,7 +172,7 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
   }, [])
 
   useEffect(() => {
-    if (height === 2000) return
+    if (lastRequestedHeightRef.current === height) return
     void loadModelRef.current?.(height)
   }, [height])
 
@@ -188,14 +182,9 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
     <div className="cad-overlay">
       <div className="cad-shell">
         <header className="cad-header">
-          <div>
-            <div className="cad-kicker">OCCT CAD CORE</div>
-            <h2>Конфигуратор НКУ</h2>
-            <div className="cad-file">R5NKMN{height / 100}.STEP</div>
-          </div>
+          <div><div className="cad-kicker">OCCT CAD CORE</div><h2>Конфигуратор НКУ</h2><div className="cad-file">R5NKMN{height / 100}.STEP</div></div>
           <button className="cad-close" onClick={onClose}>✕</button>
         </header>
-
         <div className="cad-toolbar">
           <label htmlFor="cad-height-select">Высота
             <select id="cad-height-select" value={height} onChange={(event) => setHeight(Number(event.target.value))}>
@@ -204,7 +193,6 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
           </label>
           <div className="cad-status">{loading ? 'Загрузка STEP через OCCT…' : error ? 'Ошибка' : `R5NKMN${height / 100}.STEP`}</div>
         </div>
-
         <div className="cad-main">
           <div className="cad-viewport" ref={viewportRef}>{error && <div className="cad-error">{error}</div>}</div>
           <aside className="cad-inspector">
