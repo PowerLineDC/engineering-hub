@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import './App.css'
+import CadConfigurator from './components/CadConfigurator'
 
 type Manufacturer = { id: string; logo: string; url: string }
 
@@ -9,6 +10,7 @@ function App() {
   const [selectedManufacturer, setSelectedManufacturer] = useState<string | null>(null)
   const [selectedChintFolder, setSelectedChintFolder] = useState<string | null>(null)
   const [isPanelAssemblyOpen, setIsPanelAssemblyOpen] = useState(false)
+  const [isCadConfiguratorOpen, setIsCadConfiguratorOpen] = useState(false)
 
   const tokens = [
     { id: 'Производители', icon: '🏭' },
@@ -96,11 +98,7 @@ function App() {
       <main className="tokens-container">
         <div className="tokens-grid">
           {tokens.map((token) => (
-            <div
-              key={token.id}
-              className={`token ${selectedToken === token.id ? 'token-active' : ''}`}
-              onClick={() => handleTokenClick(token.id)}
-            >
+            <div key={token.id} className={`token ${selectedToken === token.id ? 'token-active' : ''}`} onClick={() => handleTokenClick(token.id)}>
               <div className="token-icon">{token.icon}</div>
               <div className="token-label">{token.id}</div>
               {selectedToken === token.id && <div className="token-popup">Выбрана папка: {token.id}</div>}
@@ -124,7 +122,7 @@ function App() {
             </div>
             <div className="modal-body">
               <div className="manufacturer-folders">
-                <button className="manufacturer-folder-button" onClick={() => setSelectedToken('Конфигуратор НКУ')}>
+                <button className="manufacturer-folder-button" onClick={() => { setIsPanelAssemblyOpen(false); setIsCadConfiguratorOpen(true) }}>
                   ⚙️ Конфигуратор НКУ
                 </button>
               </div>
@@ -136,10 +134,7 @@ function App() {
       {isManufacturerOpen && (
         <div className="modal-overlay" onClick={closeManufacturerModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">Производители</h2>
-              <button className="modal-close" onClick={closeManufacturerModal}>✕</button>
-            </div>
+            <div className="modal-header"><h2 className="modal-title">Производители</h2><button className="modal-close" onClick={closeManufacturerModal}>✕</button></div>
             <div className="modal-body">
               <div className="manufacturers-grid">
                 {manufacturers.map((manufacturer) => (
@@ -157,39 +152,19 @@ function App() {
       {selectedManufacturer && (
         <div className="modal-overlay" onClick={closeManufacturerDetailModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">{selectedManufacturer}</h2>
-              <button className="modal-close" onClick={closeManufacturerDetailModal}>✕</button>
-            </div>
+            <div className="modal-header"><h2 className="modal-title">{selectedManufacturer}</h2><button className="modal-close" onClick={closeManufacturerDetailModal}>✕</button></div>
             <div className="modal-body">
               {selectedManufacturer === 'CHINT' && selectedChintFolder ? (
                 <div className="manufacturer-detail">
                   <h3 className="manufacturer-detail-name">{selectedChintFolder}</h3>
-                  {selectedChintFolder === 'Каталог' && (
-                    <div className="chint-catalog-grid">
-                      {chintCatalogFolders.map((folder) => (
-                        <div key={folder.name} className="manufacturer-catalog-item">
-                          <button className="manufacturer-folder-button">{folder.name}</button>
-                          <a href={folder.url} target="_blank" rel="noopener noreferrer" className="manufacturer-folder-link">{folder.url}</a>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  {selectedChintFolder === 'Каталог' && <div className="chint-catalog-grid">{chintCatalogFolders.map((folder) => <div key={folder.name} className="manufacturer-catalog-item"><button className="manufacturer-folder-button">{folder.name}</button><a href={folder.url} target="_blank" rel="noopener noreferrer" className="manufacturer-folder-link">{folder.url}</a></div>)}</div>}
                 </div>
               ) : (
                 <div className="manufacturer-detail">
                   <img src={manufacturers.find((m) => m.id === selectedManufacturer)?.logo} alt={selectedManufacturer} className="manufacturer-detail-logo" />
                   <h3 className="manufacturer-detail-name">{selectedManufacturer}</h3>
-                  <a href={manufacturers.find((m) => m.id === selectedManufacturer)?.url} target="_blank" rel="noopener noreferrer" className="manufacturer-link" onClick={(e) => e.stopPropagation()}>
-                    {manufacturers.find((m) => m.id === selectedManufacturer)?.url}
-                  </a>
-                  {selectedManufacturer === 'CHINT' && (
-                    <div className="manufacturer-folders">
-                      <button className="manufacturer-folder-button" onClick={() => setSelectedChintFolder('Серия')}>Серия</button>
-                      <button className="manufacturer-folder-button" onClick={() => setSelectedChintFolder('Каталог')}>Каталог</button>
-                      <a href="https://ensmas.ru/catalog/" target="_blank" rel="noopener noreferrer" className="manufacturer-folder-link" onClick={(e) => e.stopPropagation()}>https://ensmas.ru/catalog/</a>
-                    </div>
-                  )}
+                  <a href={manufacturers.find((m) => m.id === selectedManufacturer)?.url} target="_blank" rel="noopener noreferrer" className="manufacturer-link" onClick={(e) => e.stopPropagation()}>{manufacturers.find((m) => m.id === selectedManufacturer)?.url}</a>
+                  {selectedManufacturer === 'CHINT' && <div className="manufacturer-folders"><button className="manufacturer-folder-button" onClick={() => setSelectedChintFolder('Серия')}>Серия</button><button className="manufacturer-folder-button" onClick={() => setSelectedChintFolder('Каталог')}>Каталог</button><a href="https://ensmas.ru/catalog/" target="_blank" rel="noopener noreferrer" className="manufacturer-folder-link" onClick={(e) => e.stopPropagation()}>https://ensmas.ru/catalog/</a></div>}
                 </div>
               )}
             </div>
@@ -197,11 +172,9 @@ function App() {
         </div>
       )}
 
-      {selectedToken === 'Конфигуратор НКУ' && (
-        <div className="token-popup" style={{ position: 'fixed', bottom: '80px', left: '50%', zIndex: 2000 }}>
-          Конфигуратор НКУ пока готовится
-        </div>
-      )}
+      {isCadConfiguratorOpen && <CadConfigurator onClose={() => setIsCadConfiguratorOpen(false)} />}
+
+      {selectedToken === 'Конфигуратор НКУ' && <div className="token-popup" style={{ position: 'fixed', bottom: '80px', left: '50%', zIndex: 2000 }}>Конфигуратор НКУ пока готовится</div>}
     </div>
   )
 }
