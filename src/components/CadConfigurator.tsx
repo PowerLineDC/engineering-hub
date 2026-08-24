@@ -41,7 +41,8 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
     const keyLight = new THREE.DirectionalLight(0xffffff, 2.5)
     keyLight.position.set(500, 1000, 700)
     scene.add(keyLight)
-    scene.add(new THREE.GridHelper(4000, 40, 0x3a4652, 0x26303a))
+    const grid = new THREE.GridHelper(4000, 40, 0x3a4652, 0x26303a)
+    scene.add(grid)
 
     const resize = () => {
       const width = viewport.clientWidth
@@ -76,6 +77,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
         const center = box.getCenter(new THREE.Vector3())
         const size = box.getSize(new THREE.Vector3())
         object.position.sub(center)
+        grid.position.y = -size.y / 2
         const maxDimension = Math.max(size.x, size.y, size.z, 1)
         const distance = maxDimension * 1.65
         camera.position.set(distance, distance * 0.8, distance)
