@@ -38,32 +38,50 @@ const resolveStepPath = (stepUrl) => {
   return absolute
 }
 
-const cadId = (stepUrl) => crypto.createHash('sha256').update(stepUrl).digest('hex').slice(0, 16)
+const cadId = (...parts) => crypto.createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 16)
 
 const loadCad = (stepUrl) => {
   const stepPath = resolveStepPath(stepUrl)
   if (!stepPath) return { error: 'STEP file must point to an existing /library/*.STEP or /library/*.stp file' }
   if (!fs.existsSync(OCCT_EXE)) return { error: `OCCT reader not found: ${OCCT_EXE}` }
-
   const id = cadId(stepUrl)
   const jsonPath = path.join(CAD_CACHE_DIR, `${id}.json`)
   const objPath = path.join(CAD_CACHE_DIR, `${id}.obj`)
-
   if (!fs.existsSync(jsonPath) || !fs.existsSync(objPath)) {
     try {
       execFileSync(OCCT_EXE, [stepPath, jsonPath, objPath], { cwd: ROOT_DIR, windowsHide: true, stdio: 'pipe' })
     } catch (error) {
-      const stderr = error.stderr ? error.stderr.toString() : ''
-      const stdout = error.stdout ? error.stdout.toString() : ''
-      return { error: 'OCCT failed to process STEP', details: `${stderr}\n${stdout}`.trim() }
+      return { error: 'OCCT failed to process STEP', details: `${error.stderr?.toString() || ''}\n${error.stdout?.toString() || ''}`.trim() }
     }
   }
-
   try {
     const geometry = JSON.parse(fs.readFileSync(jsonPath, 'utf8'))
     return { ...geometry, id, modelUrl: `/api/cad/model?id=${id}`, stepUrl }
   } catch {
     return { error: 'OCCT returned invalid geometry JSON' }
+  }
+}
+
+const loadCadAssembly = (assemblyUrl, referenceUrl) => {
+  const assemblyPath = resolveStepPath(assemblyUrl)
+  const referencePath = resolveStepPath(referenceUrl)
+  if (!assemblyPath || !referencePath) return { error: 'Assembly and reference must be existing STEP files under /library/' }
+  if (!fs.existsSync(OCCT_EXE)) return { error: `OCCT reader not found: ${OCCT_EXE}` }
+
+  const id = cadId(assemblyUrl, referenceUrl)
+  const jsonPath = path.join(CAD_CACHE_DIR, `${id}.assembly.json`)
+  const componentDir = path.join(CAD_CACHE_DIR, `${id}.components`)
+  if (!fs.existsSync(jsonPath)) {
+    try {
+      execFileSync(OCCT_EXE, [assemblyPath, jsonPath, '', referencePath, componentDir], { cwd: ROOT_DIR, windowsHide: true, stdio: 'pipe' })
+    } catch (error) {
+      return { error: 'OCCT failed to recognize assembly components', details: `${error.stderr?.toString() || ''}\n${error.stdout?.toString() || ''}`.trim() }
+    }
+  }
+  try {
+    return JSON.parse(fs.readFileSync(jsonPath, 'utf8'))
+  } catch {
+    return { error: 'OCCT returned invalid assembly JSON' }
   }
 }
 
@@ -102,12 +120,28 @@ http.createServer((req, res) => {
     return send(res, result.error ? 500 : 200, result)
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/cad/recognize') {
+    const result = loadCadAssembly(url.searchParams.get('assembly'), url.searchParams.get('reference'))
+    return send(res, result.error ? 500 : 200, result)
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/cad/model') {
     const id = url.searchParams.get('id')
     if (!/^[a-f0-9]{16}$/.test(id || '')) return send(res, 400, { error: 'Invalid CAD model id' })
     const objPath = path.join(CAD_CACHE_DIR, `${id}.obj`)
     if (!fs.existsSync(objPath)) return send(res, 404, { error: 'CAD model not generated' })
     return send(res, 200, fs.readFileSync(objPath, 'utf8'), 'text/plain; charset=utf-8')
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/cad/component') {
+    const file = url.searchParams.get('file') || ''
+    if (!/^[a-z]+-\d+\.obj$/i.test(file)) return send(res, 400, { error: 'Invalid component file' })
+    const matches = fs.readdirSync(CAD_CACHE_DIR, { withFileTypes: true }).filter(entry => entry.isDirectory() && entry.name.endsWith('.components'))
+    for (const directory of matches) {
+      const objPath = path.join(CAD_CACHE_DIR, directory.name, file)
+      if (fs.existsSync(objPath)) return send(res, 200, fs.readFileSync(objPath, 'utf8'), 'text/plain; charset=utf-8')
+    }
+    return send(res, 404, { error: 'CAD component not generated' })
   }
 
   send(res, 404, { error: 'Not found' })
