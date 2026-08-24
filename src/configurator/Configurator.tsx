@@ -22,7 +22,7 @@ export function Configurator({ onClose }: { onClose: () => void }) {
           <div>
             <div className="configurator-kicker">Engineering Hub / Сборка щитов</div>
             <h2>Конфигуратор НКУ</h2>
-            <p>DKC CQE N — первый геометрический прототип</p>
+            <p>DKC CQE N — геометрия из OCCT</p>
           </div>
           <button className="configurator-close" onClick={onClose} aria-label="Закрыть">✕</button>
         </header>
@@ -54,9 +54,9 @@ export function Configurator({ onClose }: { onClose: () => void }) {
             </section>
 
             <section className="configurator-status">
-              <div><span>CAD</span><strong>Replicad + OpenCascade</strong></div>
-              <div><span>Режим</span><strong>Параметрический</strong></div>
-              <div><span>Данные</span><strong>Тестовая геометрия</strong></div>
+              <div><span>CAD</span><strong>OCCT</strong></div>
+              <div><span>Режим</span><strong>Готовая геометрия</strong></div>
+              <div><span>Источник</span><strong>STEP → OBJ</strong></div>
             </section>
           </aside>
 
