@@ -7,7 +7,6 @@
 
 #include <STEPControl_Reader.hxx>
 #include <IFSelect_ReturnStatus.hxx>
-#include <IFSelect_PrintCount.hxx>
 #include <Interface_InterfaceModel.hxx>
 #include <Interface_Check.hxx>
 #include <XSControl_WorkSession.hxx>
@@ -60,14 +59,9 @@ namespace
         std::cerr << "  Interface entities: " << model->NbEntities() << std::endl;
         std::cerr << "  Roots available: " << reader.NbRootsForTransfer() << std::endl;
 
-        const Standard_Integer errorCount = model->NbErrors();
-        const Standard_Integer warningCount = model->NbWarnings();
-        std::cerr << "  Model errors: " << errorCount << std::endl;
-        std::cerr << "  Model warnings: " << warningCount << std::endl;
-
         for (Standard_Integer entity = 1; entity <= model->NbEntities(); ++entity)
         {
-            Handle(Interface_Check) check = model->Check(entity);
+            const Handle(Interface_Check) check = model->Check(entity);
             if (!check.IsNull() && (check->NbFails() > 0 || check->NbWarnings() > 0))
             {
                 std::cerr << "  Entity #" << entity
