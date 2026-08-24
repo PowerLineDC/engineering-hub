@@ -1,0 +1,3 @@
+D:/EngineeringHub/native/occt-reader/build/CMakeFiles/occt-reader.dir
+D:/EngineeringHub/native/occt-reader/build/CMakeFiles/ALL_BUILD.dir
+D:/EngineeringHub/native/occt-reader/build/CMakeFiles/ZERO_CHECK.dir

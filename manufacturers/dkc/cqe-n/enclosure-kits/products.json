@@ -1,0 +1,18 @@
+{
+  "category": "enclosure-kits",
+  "manufacturer": "DKC",
+  "series": "CQE N",
+  "source_category_url": "https://www.dkc.ru/ru/catalog/2092/",
+  "catalog_count": 132,
+  "import_status": "partial",
+  "products": [
+    {"article":"R5CQEN2044","name":"Комплект напольного корпуса CQE N с одностворчатой дверью и с задней панелью ВхШхГ 2000x400x400 мм RAM block","unit":"шт","pack_quantity":1,"volume_m3":1.05600,"source_url":"https://www.dkc.ru/ru/catalog/2092/r5cqen2044/"},
+    {"article":"R5CQEN1884X","name":"Комплект напольного корпуса CQE N со стеклянной дверью и с задней панелью ВхШхГ 1800x800x400 мм RAM block","unit":"шт","pack_quantity":1,"weight_kg":129.0,"source_url":"https://www.dkc.ru/ru/catalog/2092/r5cqen1884x/"},
+    {"article":"R5CQEN14124","name":"Комплект напольного корпуса CQE N с двустворчатой дверью и с задней панелью ВхШхГ 1400x1200x400 мм RAM block","unit":"шт","pack_quantity":1,"weight_kg":144.0,"source_url":"https://www.dkc.ru/ru/catalog/103/r5cqen14124/"},
+    {"article":"R5CQEN2265","name":"Комплект напольного корпуса CQE N с одностворчатой дверью и с задней панелью ВхШхГ 2200x600x500 мм RAM block","unit":"шт","pack_quantity":1,"weight_kg":120.0,"volume_m3":1.07848,"source_url":"https://www.dkc.ru/ru/catalog/2092/r5cqen2265/"},
+    {"article":"R5CQEN20108X","name":"Комплект напольного корпуса CQE N со стеклянной дверью и с задней панелью ВхШхГ 2000x1000x800 мм RAM block","unit":"шт","pack_quantity":1,"volume_m3":1.05600,"source_url":"https://www.dkc.ru/ru/catalog/2092/r5cqen20108x/"},
+    {"article":"R5CQEN2288","name":"Комплект напольного корпуса CQE N с одностворчатой дверью и с задней панелью ВхШхГ 2200x800x800 мм RAM block","unit":"шт","pack_quantity":1,"weight_kg":143.0,"volume_m3":1.05600,"source_url":"https://www.dkc.ru/ru/catalog/2092/r5cqen2288/"},
+    {"article":"R5CQEN20126","name":"Комплект напольного корпуса CQE N с двустворчатой дверью и с задней панелью ВхШхГ 2000x1200x600 мм RAM block","unit":"шт","pack_quantity":1,"weight_kg":132.0,"volume_m3":3.29184,"source_url":"https://www.dkc.ru/ru/catalog/2092/r5cqen20126/"},
+    {"article":"R5CQEN20168","name":"Комплект напольного корпуса CQE N с двустворчатой дверью и с задней панелью ВхШхГ 2000x1600x800 мм RAM block","unit":"шт","pack_quantity":1,"weight_kg":230.0,"volume_m3":1.83600,"source_url":"https://www.dkc.ru/ru/catalog/2092/r5cqen20168/"}
+  ]
+}

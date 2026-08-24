@@ -1,0 +1,12 @@
+{
+  "category": "roofs-bases",
+  "manufacturer": "DKC",
+  "series": "CQE N",
+  "source_category_url": "https://www.dkc.ru/ru/catalog/1860/",
+  "catalog_count": 53,
+  "import_status": "partial",
+  "products": [
+    {"article":"R5NKTB124","name":"Крыша и основание RAL9005 с направляющими для корпусов CQE N, ШхГ 1200х400 мм, комплект RAM block","unit":"кмп","pack_quantity":1,"weight_kg":30.2,"volume_m3":0.11081,"source_url":"https://www.dkc.ru/ru/catalog/1860/r5nktb124/","material":"Сталь","roof_base_thickness_mm":1.5},
+    {"article":"R5NKTB312","name":"Крыша и основание RAL9005 с направляющими для корпусов CQE N, ШхГ 300х1200 мм, комплект RAM block","unit":"кмп","pack_quantity":1,"weight_kg":28.08,"volume_m3":0.09438,"source_url":"https://www.dkc.ru/ru/catalog/1860/r5nktb312/","material":"Сталь","roof_base_thickness_mm":1.5}
+  ]
+}

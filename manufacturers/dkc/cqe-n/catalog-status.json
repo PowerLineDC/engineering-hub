@@ -1,0 +1,19 @@
+{
+  "manufacturer": "DKC",
+  "series": "CQE N",
+  "source": "https://www.dkc.ru/ru/catalog/2096/",
+  "status": "partial_import",
+  "excluded": ["assembled-enclosures", "archived-models"],
+  "categories": {
+    "enclosure-kits": {"source_category": "Комплекты корпусов CQE N", "catalog_count": 132},
+    "roofs-bases": {"source_category": "Крыши и основания CQE N", "catalog_count": 53},
+    "vertical-posts": {"source_category": "Стойки вертикальные CQE N", "catalog_count": 7},
+    "doors": {"source_category": "Двери CQE N", "catalog_count": 135},
+    "rear-panels": {"source_category": "Панели задние CQE N", "catalog_count": 42},
+    "side-panels": {"source_category": "Панели боковые CQE N", "catalog_count": 47},
+    "plinth-components": {"source_category": "Углы, панели цоколя CQE N", "catalog_count": 22},
+    "mounting-plates": {"source_category": "Монтажные платы CQE N", "catalog_count": 340}
+  },
+  "catalog_count_included": 778,
+  "note": "Counts and sample product records were verified against the DKC website. A complete item-by-item extraction was not possible through the available web access because the aggregate catalog page exceeds the fetch limit and the accessible search results do not expose all pagination/items. No unverified products were fabricated."
+}

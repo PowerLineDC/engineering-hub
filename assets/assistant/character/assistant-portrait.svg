@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1200">
+<defs>
+ <radialGradient id="bg"><stop stop-color="#40304f"/><stop offset="1" stop-color="#0d0b13"/></radialGradient>
+ <linearGradient id="hair" x2="1" y2="1"><stop stop-color="#050508"/><stop offset=".45" stop-color="#17121d"/><stop offset=".75" stop-color="#030305"/><stop offset="1" stop-color="#211827"/></linearGradient>
+ <linearGradient id="skin" x2="0" y2="1"><stop stop-color="#ffe9e2"/><stop offset="1" stop-color="#d6aaa5"/></linearGradient>
+ <linearGradient id="dress" x2="0" y2="1"><stop stop-color="#241b31"/><stop offset=".55" stop-color="#17111f"/><stop offset="1" stop-color="#08070d"/></linearGradient>
+ <filter id="blur"><feGaussianBlur stdDeviation="24"/></filter>
+</defs>
+<rect width="800" height="1200" fill="url(#bg)"/>
+<ellipse cx="400" cy="1120" rx="270" ry="55" fill="#050408" opacity=".7" filter="url(#blur)"/>
+<!-- long flowing hair -->
+<path d="M190 530C105 340 145 120 330 65C485 18 650 125 625 350C650 555 620 800 565 970C515 1040 285 1040 225 970C165 800 150 650 190 530Z" fill="url(#hair)"/>
+<path d="M205 330C155 540 205 820 270 970M590 300C635 530 585 820 530 970" fill="none" stroke="#30263a" stroke-width="14" opacity=".65"/>
+<!-- torso and shoulders -->
+<path d="M310 515C305 575 285 605 230 640C185 670 155 750 150 850L135 1120H665L650 850C645 750 615 670 570 640C515 605 495 575 490 515Z" fill="url(#skin)"/>
+<!-- face -->
+<path d="M280 225C315 125 485 125 520 225L505 440C490 525 445 575 400 585C355 575 310 525 295 440Z" fill="url(#skin)"/>
+<!-- hair cap and framing locks -->
+<path d="M275 275C245 150 320 85 400 100C480 85 555 150 525 275C490 205 455 185 400 190C345 185 310 205 275 275Z" fill="url(#hair)"/>
+<path d="M292 235C255 355 275 485 340 545C305 455 320 330 330 245Z" fill="#07070a"/>
+<path d="M508 235C545 355 525 485 460 545C495 455 480 330 470 245Z" fill="#07070a"/>
+<!-- brows -->
+<path d="M325 325Q360 302 388 320M475 325Q440 302 412 320" fill="none" stroke="#17131a" stroke-width="8" stroke-linecap="round"/>
+<!-- eyes -->
+<path d="M325 355Q360 325 392 355Q360 388 325 355ZM475 355Q440 325 408 355Q440 388 475 355Z" fill="#fff8f5"/>
+<ellipse cx="360" cy="357" rx="12" ry="16" fill="#526d86"/><ellipse cx="440" cy="357" rx="12" ry="16" fill="#526d86"/>
+<circle cx="364" cy="351" r="4" fill="white"/><circle cx="444" cy="351" r="4" fill="white"/>
+<!-- nose lips -->
+<path d="M400 365C391 405 390 425 404 431" fill="none" stroke="#ae7f7c" stroke-width="5" stroke-linecap="round"/>
+<path d="M367 460Q400 480 433 460Q400 495 367 460Z" fill="#9c5f6d"/>
+<!-- neck -->
+<path d="M335 520L330 625Q400 680 470 625L465 520Q435 575 400 585Q365 575 335 520Z" fill="url(#skin)"/>
+<!-- fitted dress -->
+<path d="M330 605Q270 625 220 690Q185 735 175 820L145 1120H655L625 820Q615 735 580 690Q530 625 470 605L445 690Q425 720 400 735Q375 720 355 690Z" fill="url(#dress)"/>
+<!-- neckline -->
+<path d="M330 610Q345 675 400 720Q455 675 470 610" fill="none" stroke="#9c78a9" stroke-width="6"/>
+<path d="M355 690Q400 735 445 690" fill="none" stroke="#c39ac8" stroke-width="4" opacity=".7"/>
+<!-- waist -->
+<path d="M265 790Q400 835 535 790" fill="none" stroke="#4b3857" stroke-width="9"/>
+<!-- elegant slit -->
+<path d="M400 820L400 1120" stroke="#80618a" stroke-width="5" opacity=".7"/>
+<path d="M400 900L360 1120H440Z" fill="#0b0910"/>
+<!-- subtle fantasy ornament -->
+<path d="M400 744C385 760 383 785 400 805C417 785 415 760 400 744Z" fill="#c3a0d2" opacity=".7"/>
+<circle cx="400" cy="775" r="5" fill="#fff2ff"/>
+<!-- hands -->
+<path d="M220 715Q195 770 205 820Q220 835 235 815L250 755" fill="url(#skin)"/>
+<path d="M580 715Q605 770 595 820Q580 835 565 815L550 755" fill="url(#skin)"/>
+</svg>

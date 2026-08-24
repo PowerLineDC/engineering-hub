@@ -1,0 +1,10 @@
+^D:\ENGINEERINGHUB\NATIVE\OCCT-READER\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SD:/EngineeringHub/native/occt-reader -BD:/EngineeringHub/native/occt-reader/build --check-stamp-file D:/EngineeringHub/native/occt-reader/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
