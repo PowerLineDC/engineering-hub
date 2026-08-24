@@ -5,7 +5,6 @@
 #include <string>
 #include <filesystem>
 #include <algorithm>
-#include <cstdio>
 
 #include <STEPControl_Reader.hxx>
 #include <IFSelect_ReturnStatus.hxx>
@@ -51,7 +50,7 @@ namespace
         return result;
     }
 
-    void inspectRawStepFile(const std::string& path)
+    void inspectRawStepFile(const std::filesystem::path& path)
     {
         std::ifstream input(path, std::ios::binary);
         if (!input)
@@ -86,9 +85,10 @@ namespace
 
     std::filesystem::path makeAsciiStepCopy(const std::filesystem::path& source)
     {
-        const std::filesystem::path tempDir = std::filesystem::temp_directory_path();
-        const std::filesystem::path target = tempDir / "engineeringhub_occt_input.step";
+        const std::filesystem::path target = std::filesystem::path("C:/EngineeringHub_OCCT/engineeringhub_occt_input.step");
         std::error_code ec;
+        std::filesystem::create_directories(target.parent_path(), ec);
+        if (ec) throw std::runtime_error("Cannot create ASCII STEP directory: " + ec.message());
         std::filesystem::copy_file(source, target, std::filesystem::copy_options::overwrite_existing, ec);
         if (ec) throw std::runtime_error("Cannot create ASCII STEP copy: " + ec.message());
         return target;
@@ -209,35 +209,36 @@ namespace
     }
 }
 
-int main(int argc, char* argv[])
+int wmain(int argc, wchar_t* argv[])
 {
     if (argc < 2 || argc > 4)
     {
-        std::cerr << "Usage: occt-reader <file.step> [output.json] [output.obj]" << std::endl;
+        std::wcerr << L"Usage: occt-reader <file.step> [output.json] [output.obj]" << std::endl;
         return 1;
     }
 
-    const std::string filePath = argv[1];
-    const std::string jsonPath = argc >= 3 ? argv[2] : "";
-    const std::string objPath = argc >= 4 ? argv[3] : "";
+    const std::filesystem::path sourcePath(argv[1]);
+    const std::string jsonPath = argc >= 3 ? std::filesystem::path(argv[2]).string() : "";
+    const std::string objPath = argc >= 4 ? std::filesystem::path(argv[3]).string() : "";
 
     std::error_code ec;
-    const auto fileSize = std::filesystem::file_size(filePath, ec);
+    const auto fileSize = std::filesystem::file_size(sourcePath, ec);
     if (ec)
     {
-        std::cerr << "Cannot access STEP file: " << filePath << std::endl;
-        std::cerr << "Filesystem error: " << ec.message() << std::endl;
+        std::wcerr << L"Cannot access STEP file: " << sourcePath.wstring() << std::endl;
+        std::wcerr << L"Filesystem error: " << ec.message().c_str() << std::endl;
         return 2;
     }
-    std::cerr << "STEP file: " << filePath << std::endl;
+
+    std::wcerr << L"STEP file: " << sourcePath.wstring() << std::endl;
     std::cerr << "STEP size: " << fileSize << " bytes" << std::endl;
-    inspectRawStepFile(filePath);
+    inspectRawStepFile(sourcePath);
 
     std::filesystem::path asciiStepPath;
     try
     {
-        asciiStepPath = makeAsciiStepCopy(std::filesystem::u8path(filePath));
-        std::cerr << "OCCT STEP input copy: " << asciiStepPath.string() << std::endl;
+        asciiStepPath = makeAsciiStepCopy(sourcePath);
+        std::wcerr << L"OCCT STEP input copy: " << asciiStepPath.wstring() << std::endl;
     }
     catch (const std::exception& error)
     {
@@ -253,8 +254,7 @@ int main(int argc, char* argv[])
     {
         printReaderDiagnostics(reader);
         std::cerr << "STEP read failed. The file was not accepted by OCCT STEPControl_Reader." << std::endl;
-        std::error_code removeEc;
-        std::filesystem::remove(asciiStepPath, removeEc);
+        std::filesystem::remove(asciiStepPath, ec);
         return 4;
     }
 
@@ -268,26 +268,23 @@ int main(int argc, char* argv[])
     if (shape.IsNull())
     {
         std::cerr << "Resulting shape is null after successful STEP transfer" << std::endl;
-        std::error_code removeEc;
-        std::filesystem::remove(asciiStepPath, removeEc);
+        std::filesystem::remove(asciiStepPath, ec);
         return 5;
     }
 
     try
     {
-        if (!jsonPath.empty()) writeJson(jsonPath, filePath, shape, roots, transferred);
+        if (!jsonPath.empty()) writeJson(jsonPath, sourcePath.string(), shape, roots, transferred);
         if (!objPath.empty()) writeObj(objPath, shape);
     }
     catch (const std::exception& error)
     {
-        std::error_code removeEc;
-        std::filesystem::remove(asciiStepPath, removeEc);
+        std::filesystem::remove(asciiStepPath, ec);
         std::cerr << "Geometry processing failed: " << error.what() << std::endl;
         return 6;
     }
 
-    std::error_code removeEc;
-    std::filesystem::remove(asciiStepPath, removeEc);
+    std::filesystem::remove(asciiStepPath, ec);
 
     std::cout << "STEP read OK" << std::endl;
     std::cout << "Roots: " << roots << std::endl;
