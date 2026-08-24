@@ -5,7 +5,6 @@ import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import './CadConfigurator.css'
 
 type CadGeometry = {
-  stepFile: string
   roots: number
   transferred: number
   solids: number
@@ -13,16 +12,15 @@ type CadGeometry = {
   faces: number
   boundingBox: { min: [number, number, number]; max: [number, number, number]; size: [number, number, number] }
   volume: number
-  modelUrl: string
 }
 
-const DEFAULT_STEP = '/library/dkc/каркас корпуса/R5CQEN1464A.stp'
+const MODEL_URL = '/library/dkc/каркас корпуса/EngineeringHub_OCCT/model.obj'
+const MODEL_JSON_URL = '/library/dkc/каркас корпуса/EngineeringHub_OCCT/model.json'
 
 function CadConfigurator({ onClose }: { onClose: () => void }) {
   const viewportRef = useRef<HTMLDivElement | null>(null)
-  const [stepFile, setStepFile] = useState(DEFAULT_STEP)
   const [geometry, setGeometry] = useState<CadGeometry | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -59,14 +57,15 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
       setLoading(true)
       setError(null)
       try {
-        const response = await fetch(`/api/cad/inspect?step=${encodeURIComponent(stepFile)}`)
-        const inspect = await response.json()
-        if (!response.ok) throw new Error(inspect.error || inspect.details || 'OCCT inspection failed')
+        const [jsonResponse, object] = await Promise.all([
+          fetch(MODEL_JSON_URL),
+          new OBJLoader().loadAsync(MODEL_URL),
+        ])
+        if (!jsonResponse.ok) throw new Error(`Не удалось загрузить OCCT JSON: ${jsonResponse.status}`)
+        const inspect = await jsonResponse.json() as CadGeometry
         if (cancelled) return
         setGeometry(inspect)
 
-        const object = await new OBJLoader().loadAsync(inspect.modelUrl)
-        if (cancelled) return
         object.traverse((child) => {
           if (child instanceof THREE.Mesh) {
             child.material = new THREE.MeshStandardMaterial({ color: 0x9da8b2, metalness: 0.45, roughness: 0.42, side: THREE.DoubleSide })
@@ -117,7 +116,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
         }
       })
     }
-  }, [stepFile])
+  }, [])
 
   const dimension = geometry?.boundingBox.size ?? [0, 0, 0]
 
@@ -128,21 +127,18 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
           <div>
             <div className="cad-kicker">OCCT CAD CORE</div>
             <h2>Конфигуратор НКУ</h2>
-            <div className="cad-file">{stepFile}</div>
+            <div className="cad-file">R5CQEN1464A · OCCT mesh</div>
           </div>
           <button className="cad-close" onClick={onClose}>✕</button>
         </header>
 
         <div className="cad-toolbar">
           <label>Каркас
-            <select value={stepFile} onChange={(event) => setStepFile(event.target.value)}>
-              <option value="/library/dkc/каркас корпуса/R5CQEN1464A.stp">R5CQEN1464A</option>
-              <option value="/library/dkc/каркас корпуса/R5CQEN1465A.stp">R5CQEN1465A</option>
-              <option value="/library/dkc/каркас корпуса/R5CQEN1484A.stp">R5CQEN1484A</option>
-              <option value="/library/dkc/каркас корпуса/R5CQEN1485A.stp">R5CQEN1485A</option>
+            <select value="R5CQEN1464A" disabled>
+              <option value="R5CQEN1464A">R5CQEN1464A</option>
             </select>
           </label>
-          <div className="cad-status">{loading ? 'OCCT обрабатывает STEP…' : error ? 'Ошибка' : 'Геометрия загружена'}</div>
+          <div className="cad-status">{loading ? 'Загрузка OCCT-модели…' : error ? 'Ошибка' : 'Геометрия загружена'}</div>
         </div>
 
         <div className="cad-main">
@@ -158,7 +154,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
             <div className="cad-row"><span>Shell</span><b>{geometry?.shells ?? '—'}</b></div>
             <div className="cad-row"><span>Faces</span><b>{geometry?.faces ?? '—'}</b></div>
             <div className="cad-divider" />
-            <p className="cad-note">Размеры и топология получены непосредственно из OCCT. OBJ используется только как промежуточный формат отображения в браузере.</p>
+            <p className="cad-note">Размеры и топология получены из результата OCCT. OBJ используется только для отображения геометрии в браузере.</p>
           </aside>
         </div>
       </div>
