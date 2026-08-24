@@ -1,0 +1,12 @@
+{
+  "assemblyFile": "D:\EngineeringHub\public\library\dkc\Osnovnyye_elementy_korpusa_CQE_N\R5NKMN\R5NKMN20.STEP",
+  "referenceFile": "D:\EngineeringHub\public\library\dkc\Osnovnyye_elementy_korpusa_CQE_N\R5NKMN\1\R5NKMN20 (1רע).STEP",
+  "solidCount": 4,
+  "postCount": 4,
+  "components": [
+    {"id":"post-1","type":"post","modelUrl":"/api/cad/component?file=post-1.obj","position":[625.943791138433,-528.472285147397,588.547954227883],"size":[49.8226447093948,1899.12264470909,49.8226447093947]},
+    {"id":"post-2","type":"post","modelUrl":"/api/cad/component?file=post-2.obj","position":[-123.756208861497,-528.472285147397,588.547954227883],"size":[49.8226447093349,1899.12264470909,49.8226447093947]},
+    {"id":"post-3","type":"post","modelUrl":"/api/cad/component?file=post-3.obj","position":[-123.756208861495,-528.472285147395,52.8479542278876],"size":[49.8226447093308,1899.12264470909,49.8226447093878]},
+    {"id":"post-4","type":"post","modelUrl":"/api/cad/component?file=post-4.obj","position":[625.943791138435,-528.472285147395,52.8479542278876],"size":[49.8226447093909,1899.12264470909,49.8226447093878]}
+  ]
+}
