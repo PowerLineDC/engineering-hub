@@ -29,7 +29,7 @@ const send = (res, status, data, contentType = 'application/json; charset=utf-8'
 }
 
 const resolveStepPath = (stepUrl) => {
-  if (!stepUrl || !stepUrl.startsWith('/library/') || !/\.stp$/i.test(stepUrl)) return null
+  if (!stepUrl || !stepUrl.startsWith('/library/') || !/\.step?$/i.test(stepUrl)) return null
   const relative = stepUrl.replace(/^\/+/, '')
   const absolute = path.resolve(PUBLIC_DIR, relative.replace(/^library[\\/]/, 'library/'))
   const publicRoot = path.resolve(PUBLIC_DIR) + path.sep
@@ -40,9 +40,9 @@ const resolveStepPath = (stepUrl) => {
 
 const cadId = (stepUrl) => crypto.createHash('sha256').update(stepUrl).digest('hex').slice(0, 16)
 
-const inspectCad = (stepUrl) => {
+const loadCad = (stepUrl) => {
   const stepPath = resolveStepPath(stepUrl)
-  if (!stepPath) return { error: 'STEP file must point to an existing /library/*.stp file' }
+  if (!stepPath) return { error: 'STEP file must point to an existing /library/*.STEP or /library/*.stp file' }
   if (!fs.existsSync(OCCT_EXE)) return { error: `OCCT reader not found: ${OCCT_EXE}` }
 
   const id = cadId(stepUrl)
@@ -65,7 +65,7 @@ const inspectCad = (stepUrl) => {
 
   try {
     const geometry = JSON.parse(fs.readFileSync(jsonPath, 'utf8'))
-    return { ...geometry, id, modelUrl: `/api/cad/model?id=${id}` }
+    return { ...geometry, id, modelUrl: `/api/cad/model?id=${id}`, stepUrl }
   } catch {
     return { error: 'OCCT returned invalid geometry JSON' }
   }
@@ -98,7 +98,12 @@ http.createServer((req, res) => {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/cad/inspect') {
-    const result = inspectCad(url.searchParams.get('step'))
+    const result = loadCad(url.searchParams.get('step'))
+    return send(res, result.error ? 500 : 200, result)
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/cad/load') {
+    const result = loadCad(url.searchParams.get('step'))
     return send(res, result.error ? 500 : 200, result)
   }
 
