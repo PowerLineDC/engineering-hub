@@ -8,7 +8,6 @@
 #include <STEPControl_Reader.hxx>
 #include <IFSelect_ReturnStatus.hxx>
 #include <Interface_InterfaceModel.hxx>
-#include <Interface_Check.hxx>
 #include <XSControl_WorkSession.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Shape.hxx>
@@ -58,13 +57,6 @@ namespace
 
         std::cerr << "  Interface entities: " << model->NbEntities() << std::endl;
         std::cerr << "  Roots available: " << reader.NbRootsForTransfer() << std::endl;
-
-        const Handle(Interface_Check) check = model->Check();
-        if (!check.IsNull())
-        {
-            std::cerr << "  Model check failures: " << check->NbFails() << std::endl;
-            std::cerr << "  Model check warnings: " << check->NbWarnings() << std::endl;
-        }
     }
 
     void writeJson(const std::string& path, const std::string& stepPath, const TopoDS_Shape& shape, Standard_Integer roots, Standard_Integer transferred)
