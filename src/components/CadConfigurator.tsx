@@ -13,178 +13,36 @@ type CadGeometry = {
   faces: number
   boundingBox: { min: [number, number, number]; max: [number, number, number]; size: [number, number, number] }
   volume: number
+  modelUrl: string
+  stepUrl: string
 }
 
-const MODEL_URL = '/library/dkc/каркас корпуса/EngineeringHub_OCCT/model.obj'
-const MODEL_JSON_URL = '/library/dkc/каркас корпуса/EngineeringHub_OCCT/model.json'
-
-type PartKind = 'base' | 'posts' | 'roof' | 'other'
-
-type CadPart = {
-  kind: PartKind
-  object: THREE.Object3D
-  label: string
-}
-
-function buildPartGeometry(source: THREE.BufferGeometry, triangleFilter: (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) => boolean) {
-  const position = source.getAttribute('position')
-  if (!position) return null
-  const sourceIndex = source.getIndex()
-  const vertices: number[] = []
-  const indices: number[] = []
-  const map = new Map<string, number>()
-  const a = new THREE.Vector3()
-  const b = new THREE.Vector3()
-  const c = new THREE.Vector3()
-
-  const addVertex = (x: number, y: number, z: number) => {
-    const key = `${x}|${y}|${z}`
-    const existing = map.get(key)
-    if (existing !== undefined) return existing
-    const index = vertices.length / 3
-    vertices.push(x, y, z)
-    map.set(key, index)
-    return index
-  }
-
-  const triangleCount = sourceIndex ? sourceIndex.count / 3 : position.count / 3
-  for (let triangle = 0; triangle < triangleCount; triangle += 1) {
-    const ia = sourceIndex ? sourceIndex.getX(triangle * 3) : triangle * 3
-    const ib = sourceIndex ? sourceIndex.getX(triangle * 3 + 1) : triangle * 3 + 1
-    const ic = sourceIndex ? sourceIndex.getX(triangle * 3 + 2) : triangle * 3 + 2
-    a.fromBufferAttribute(position, ia)
-    b.fromBufferAttribute(position, ib)
-    c.fromBufferAttribute(position, ic)
-    if (!triangleFilter(a, b, c)) continue
-    indices.push(addVertex(a.x, a.y, a.z), addVertex(b.x, b.y, b.z), addVertex(c.x, c.y, c.z))
-  }
-
-  if (!indices.length) return null
-  const geometry = new THREE.BufferGeometry()
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3))
-  geometry.setIndex(indices)
-  geometry.computeVertexNormals()
-  return geometry
-}
-
-function splitMonolithicModel(source: THREE.Object3D) {
-  const meshes: THREE.Mesh[] = []
-  source.traverse((child) => {
-    if (child instanceof THREE.Mesh) meshes.push(child)
-  })
-  if (!meshes.length) return [] as CadPart[]
-
-  const sourceGeometry = meshes[0].geometry
-  sourceGeometry.computeBoundingBox()
-  const box = sourceGeometry.boundingBox
-  if (!box) return [] as CadPart[]
-
-  const size = box.getSize(new THREE.Vector3())
-  const min = box.min.clone()
-  const max = box.max.clone()
-  const yHeight = Math.max(size.y, 1)
-  const xMid = (min.x + max.x) / 2
-  const zMid = (min.z + max.z) / 2
-
-  // Important: do not cut a physical part by an arbitrary horizontal plane.
-  // The previous implementation did exactly that and split the four posts
-  // when the roof was selected. For this temporary monolithic OBJ we only
-  // classify complete triangles: roof by its top region + surface normal,
-  // base by its bottom region, posts by their corner position. Everything
-  // else stays fixed.
-  const roofY = min.y + yHeight * 0.86
-  const baseY = min.y + yHeight * 0.14
-  const postMinY = min.y + yHeight * 0.10
-  const postMaxY = min.y + yHeight * 0.90
-  const cornerX = Math.max(size.x * 0.38, 1)
-  const cornerZ = Math.max(size.z * 0.38, 1)
-  const postHalfX = Math.max(size.x * 0.10, 1)
-  const postHalfZ = Math.max(size.z * 0.10, 1)
-
-  const material = new THREE.MeshStandardMaterial({ color: 0x9da8b2, metalness: 0.45, roughness: 0.42, side: THREE.DoubleSide })
-  const parts: CadPart[] = []
-
-  const roofGeometry = buildPartGeometry(sourceGeometry, (a, b, c) => {
-    const center = new THREE.Vector3().add(a).add(b).add(c).multiplyScalar(1 / 3)
-    if (center.y < roofY) return false
-    const ab = new THREE.Vector3().subVectors(b, a)
-    const ac = new THREE.Vector3().subVectors(c, a)
-    const normal = new THREE.Vector3().crossVectors(ab, ac).normalize()
-    // Horizontal roof faces are safe to move; vertical faces at the roof/post
-    // junction remain fixed instead of being torn from the posts.
-    return Math.abs(normal.y) > 0.55
-  })
-  if (roofGeometry) parts.push({ kind: 'roof', object: new THREE.Mesh(roofGeometry, material.clone()), label: 'Крыша' })
-
-  const baseGeometry = buildPartGeometry(sourceGeometry, (a, b, c) => {
-    const centerY = (a.y + b.y + c.y) / 3
-    return centerY <= baseY
-  })
-  if (baseGeometry) parts.push({ kind: 'base', object: new THREE.Mesh(baseGeometry, material.clone()), label: 'Основание' })
-
-  const corners = [
-    { x: -1, z: -1 }, { x: -1, z: 1 }, { x: 1, z: -1 }, { x: 1, z: 1 },
-  ]
-  const postMeshes: THREE.Mesh[] = []
-  corners.forEach((corner) => {
-    const targetX = xMid + corner.x * cornerX
-    const targetZ = zMid + corner.z * cornerZ
-    const geometry = buildPartGeometry(sourceGeometry, (a, b, c) => {
-      const y = (a.y + b.y + c.y) / 3
-      if (y < postMinY || y > postMaxY) return false
-      const x = (a.x + b.x + c.x) / 3
-      const z = (a.z + b.z + c.z) / 3
-      return Math.abs(x - targetX) <= postHalfX && Math.abs(z - targetZ) <= postHalfZ
-    })
-    if (geometry) postMeshes.push(new THREE.Mesh(geometry, material.clone()))
-  })
-
-  if (postMeshes.length) {
-    const postGroup = new THREE.Group()
-    postGroup.name = 'FourPosts'
-    postMeshes.forEach((post) => postGroup.add(post))
-    parts.push({ kind: 'posts', object: postGroup, label: '4 стойки' })
-  }
-
-  // Keep the source geometry not assigned to a movable class fixed. This is
-  // intentionally conservative: a triangle is never both movable and fixed.
-  const otherGeometry = buildPartGeometry(sourceGeometry, (a, b, c) => {
-    const center = new THREE.Vector3().add(a).add(b).add(c).multiplyScalar(1 / 3)
-    const y = center.y
-    if (y <= baseY) return false
-    if (y >= roofY) {
-      const ab = new THREE.Vector3().subVectors(b, a)
-      const ac = new THREE.Vector3().subVectors(c, a)
-      const normal = new THREE.Vector3().crossVectors(ab, ac).normalize()
-      if (Math.abs(normal.y) > 0.55) return false
-    }
-    if (y < postMinY || y > postMaxY) return true
-    const isPost = corners.some((corner) => {
-      const targetX = xMid + corner.x * cornerX
-      const targetZ = zMid + corner.z * cornerZ
-      return Math.abs(center.x - targetX) <= postHalfX && Math.abs(center.z - targetZ) <= postHalfZ
-    })
-    return !isPost
-  })
-  if (otherGeometry) parts.push({ kind: 'other', object: new THREE.Mesh(otherGeometry, material.clone()), label: 'Прочие элементы' })
-
-  return parts
-}
+const HEIGHTS = [1000, 1200, 1400, 1600, 1800, 2000, 2200]
+const LIBRARY_ROOT = '/library/dkc/Osnovnyye_elementy_korpusa_CQE_N/R5NKMN'
+const STEP_FOR_HEIGHT: Record<number, string> = Object.fromEntries(
+  HEIGHTS.map((height) => [height, `${LIBRARY_ROOT}/R5NKMN${height / 100}.STEP`]),
+)
 
 function CadConfigurator({ onClose }: { onClose: () => void }) {
   const viewportRef = useRef<HTMLDivElement | null>(null)
+  const loadModelRef = useRef<((height: number, firstLoad?: boolean) => Promise<void>) | null>(null)
+  const [height, setHeight] = useState(2000)
   const [geometry, setGeometry] = useState<CadGeometry | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedPart, setSelectedPart] = useState('Нет')
+  const [selected, setSelected] = useState(false)
 
   useEffect(() => {
-    let cancelled = false
     const viewport = viewportRef.current
     if (!viewport) return
 
+    let cancelled = false
+    let currentPosts: THREE.Group | null = null
+    let animationFrame = 0
+
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0x11161c)
+
     const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1e7)
     const renderer = new THREE.WebGLRenderer({ antialias: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -192,10 +50,12 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
 
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
+
     scene.add(new THREE.HemisphereLight(0xffffff, 0x202830, 2.2))
     const keyLight = new THREE.DirectionalLight(0xffffff, 2.5)
     keyLight.position.set(500, 1000, 700)
     scene.add(keyLight)
+
     const grid = new THREE.GridHelper(4000, 40, 0x3a4652, 0x26303a)
     scene.add(grid)
 
@@ -203,64 +63,64 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
     transform.setMode('translate')
     transform.setSpace('world')
     transform.setSize(0.8)
+    transform.setTranslationSnap(1)
     transform.addEventListener('dragging-changed', (event) => {
       controls.enabled = !event.value
     })
     scene.add(transform.getHelper())
 
-    const parts: CadPart[] = []
     const raycaster = new THREE.Raycaster()
     const pointer = new THREE.Vector2()
 
-    const selectPart = (part: CadPart | null) => {
-      if (!part || part.kind === 'base' || part.kind === 'other') {
-        transform.detach()
-        setSelectedPart(part?.label ?? 'Нет')
-        return
-      }
-      transform.attach(part.object)
-      setSelectedPart(part.label)
+    const disposeObject = (object: THREE.Object3D) => {
+      object.traverse((child) => {
+        if (!(child instanceof THREE.Mesh)) return
+        child.geometry.dispose()
+        if (Array.isArray(child.material)) child.material.forEach((material) => material.dispose())
+        else child.material.dispose()
+      })
+      scene.remove(object)
+    }
+
+    const selectPosts = () => {
+      if (!currentPosts) return
+      transform.attach(currentPosts)
+      setSelected(true)
     }
 
     const onPointerDown = (event: PointerEvent) => {
-      if (event.button !== 0 || transform.dragging) return
+      if (event.button !== 0 || transform.dragging || !currentPosts) return
       const rect = renderer.domElement.getBoundingClientRect()
       pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
       pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
       raycaster.setFromCamera(pointer, camera)
-      const intersections = raycaster.intersectObjects(parts.map((part) => part.object), true)
-      if (!intersections.length) {
-        selectPart(null)
-        return
+      const hits = raycaster.intersectObject(currentPosts, true)
+      if (hits.length > 0) selectPosts()
+      else {
+        transform.detach()
+        setSelected(false)
       }
-      const hit = intersections[0].object
-      const part = parts.find((item) => item.object === hit || item.object === hit.parent || item.object === hit.parent?.parent)
-      selectPart(part ?? null)
     }
     renderer.domElement.addEventListener('pointerdown', onPointerDown)
 
-    const resize = () => {
-      const width = viewport.clientWidth
-      const height = viewport.clientHeight
-      renderer.setSize(width, height, false)
-      camera.aspect = width / Math.max(height, 1)
-      camera.updateProjectionMatrix()
-    }
-    resize()
-    window.addEventListener('resize', resize)
-
-    const loadModel = async () => {
+    const loadModel = async (selectedHeight: number, firstLoad = false) => {
       setLoading(true)
       setError(null)
+      transform.detach()
+      setSelected(false)
+
       try {
-        const [jsonResponse, object] = await Promise.all([
-          fetch(MODEL_JSON_URL),
-          new OBJLoader().loadAsync(MODEL_URL),
-        ])
-        if (!jsonResponse.ok) throw new Error(`Не удалось загрузить OCCT JSON: ${jsonResponse.status}`)
-        const inspect = await jsonResponse.json() as CadGeometry
-        if (cancelled) return
-        setGeometry(inspect)
+        const stepUrl = STEP_FOR_HEIGHT[selectedHeight]
+        const response = await fetch(`/api/cad/load?step=${encodeURIComponent(stepUrl)}`)
+        const data = await response.json() as CadGeometry & { error?: string; details?: string }
+        if (!response.ok || data.error) {
+          throw new Error(data.details ? `${data.error}: ${data.details}` : data.error || `CAD server error: ${response.status}`)
+        }
+        const object = await new OBJLoader().loadAsync(data.modelUrl)
+        if (cancelled) {
+          disposeObject(object)
+          return
+        }
 
         const box = new THREE.Box3().setFromObject(object)
         const center = box.getCenter(new THREE.Vector3())
@@ -268,29 +128,59 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
         object.position.sub(center)
         grid.position.y = -size.y / 2
 
-        splitMonolithicModel(object).forEach((part) => {
-          part.object.position.copy(object.position)
-          scene.add(part.object)
-          parts.push(part)
+        object.traverse((child) => {
+          if (!(child instanceof THREE.Mesh)) return
+          child.material = new THREE.MeshStandardMaterial({
+            color: 0x9da8b2,
+            metalness: 0.45,
+            roughness: 0.42,
+            side: THREE.DoubleSide,
+          })
         })
 
-        const maxDimension = Math.max(size.x, size.y, size.z, 1)
-        const distance = maxDimension * 1.65
-        camera.position.set(distance, distance * 0.8, distance)
-        camera.near = Math.max(maxDimension / 10000, 0.1)
-        camera.far = maxDimension * 20
-        camera.updateProjectionMatrix()
-        controls.target.set(0, 0, 0)
-        controls.update()
+        const posts = new THREE.Group()
+        posts.name = 'R5NKMN_FOUR_POSTS'
+        posts.userData.partType = 'four-posts'
+        posts.userData.manufacturer = 'DKC'
+        posts.userData.article = `R5NKMN${selectedHeight / 100}`
+        posts.userData.height = selectedHeight
+        posts.add(object)
+
+        if (currentPosts) disposeObject(currentPosts)
+        currentPosts = posts
+        scene.add(posts)
+        setGeometry(data)
+
+        if (firstLoad) {
+          const maxDimension = Math.max(size.x, size.y, size.z, 1)
+          const distance = maxDimension * 1.65
+          camera.position.set(distance, distance * 0.8, distance)
+          camera.near = Math.max(maxDimension / 10000, 0.1)
+          camera.far = maxDimension * 20
+          camera.updateProjectionMatrix()
+          controls.target.set(0, 0, 0)
+          controls.update()
+        }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Не удалось загрузить CAD-модель')
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Не удалось загрузить STEP-модель')
       } finally {
         if (!cancelled) setLoading(false)
       }
     }
 
-    loadModel()
-    let animationFrame = 0
+    loadModelRef.current = loadModel
+    void loadModel(2000, true)
+
+    const resize = () => {
+      const width = viewport.clientWidth
+      const heightPx = viewport.clientHeight
+      renderer.setSize(width, heightPx, false)
+      camera.aspect = width / Math.max(heightPx, 1)
+      camera.updateProjectionMatrix()
+    }
+    resize()
+    window.addEventListener('resize', resize)
+
     const animate = () => {
       animationFrame = requestAnimationFrame(animate)
       controls.update()
@@ -300,22 +190,23 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
 
     return () => {
       cancelled = true
+      loadModelRef.current = null
       cancelAnimationFrame(animationFrame)
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
       window.removeEventListener('resize', resize)
-      controls.dispose()
+      transform.detach()
       transform.dispose()
+      controls.dispose()
+      if (currentPosts) disposeObject(currentPosts)
       renderer.dispose()
       if (renderer.domElement.parentNode === viewport) viewport.removeChild(renderer.domElement)
-      scene.traverse((object) => {
-        if (object instanceof THREE.Mesh) {
-          object.geometry.dispose()
-          if (Array.isArray(object.material)) object.material.forEach((material) => material.dispose())
-          else object.material.dispose()
-        }
-      })
     }
   }, [])
+
+  useEffect(() => {
+    if (height === 2000) return
+    void loadModelRef.current?.(height)
+  }, [height])
 
   const dimension = geometry?.boundingBox.size ?? [0, 0, 0]
 
@@ -326,37 +217,38 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
           <div>
             <div className="cad-kicker">OCCT CAD CORE</div>
             <h2>Конфигуратор НКУ</h2>
-            <div className="cad-file">R5CQEN1464A · OCCT mesh</div>
+            <div className="cad-file">DKC · 4 стойки · R5NKMN{height / 100}.STEP</div>
           </div>
           <button className="cad-close" onClick={onClose}>✕</button>
         </header>
 
         <div className="cad-toolbar">
-          <label>Каркас
-            <select value="R5CQEN1464A" disabled>
-              <option value="R5CQEN1464A">R5CQEN1464A</option>
+          <label htmlFor="cad-height-select">Высота
+            <select id="cad-height-select" value={height} onChange={(event) => setHeight(Number(event.target.value))}>
+              {HEIGHTS.map((value) => <option key={value} value={value}>{value} мм</option>)}
             </select>
           </label>
-          <div className="cad-status">{loading ? 'Загрузка OCCT-модели…' : error ? 'Ошибка' : `Выбрано: ${selectedPart}`}</div>
+          <div className="cad-status">
+            {loading ? 'Загрузка STEP через OCCT…' : error ? 'Ошибка' : selected ? 'Выбрано: 4 стойки' : 'ЛКМ по стойке — выбрать 4 стойки'}
+          </div>
         </div>
 
         <div className="cad-main">
-          <div className="cad-viewport" ref={viewportRef}>{error && <div className="cad-error">{error}</div>}</div>
+          <div className="cad-viewport" ref={viewportRef}>
+            {error && <div className="cad-error">{error}</div>}
+          </div>
           <aside className="cad-inspector">
-            <h3>Геометрия</h3>
+            <h3>Модель</h3>
+            <div className="cad-row"><span>Высота</span><b>{height} мм</b></div>
+            <div className="cad-row"><span>Артикул</span><b>R5NKMN{height / 100}</b></div>
+            <div className="cad-row"><span>Объект</span><b>4 стойки</b></div>
+            <div className="cad-divider" />
+            <h3>Размеры OCCT</h3>
             <div className="cad-stat"><span>X</span><strong>{dimension[0].toFixed(1)} мм</strong></div>
             <div className="cad-stat"><span>Y</span><strong>{dimension[1].toFixed(1)} мм</strong></div>
             <div className="cad-stat"><span>Z</span><strong>{dimension[2].toFixed(1)} мм</strong></div>
             <div className="cad-divider" />
-            <div className="cad-row"><span>Выбранный элемент</span><b>{selectedPart}</b></div>
-            <div className="cad-row"><span>Основание</span><b>Закреплено</b></div>
-            <div className="cad-divider" />
-            <div className="cad-row"><span>Корней STEP</span><b>{geometry?.roots ?? '—'}</b></div>
-            <div className="cad-row"><span>Solid</span><b>{geometry?.solids ?? '—'}</b></div>
-            <div className="cad-row"><span>Shell</span><b>{geometry?.shells ?? '—'}</b></div>
-            <div className="cad-row"><span>Faces</span><b>{geometry?.faces ?? '—'}</b></div>
-            <div className="cad-divider" />
-            <p className="cad-note">ЛКМ выбирает крышу или четыре стойки. Стойки объединены в одну группу и перемещаются только совместно. Основание закреплено на рабочей сетке.</p>
+            <p className="cad-note">ЛКМ по любой из 4 стоек выбирает всю группу стоек. Перемещение вверх, вниз и в стороны. Шаг: 1 мм.</p>
           </aside>
         </div>
       </div>
