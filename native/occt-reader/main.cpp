@@ -9,6 +9,7 @@
 #include <IFSelect_ReturnStatus.hxx>
 #include <IFSelect_PrintCount.hxx>
 #include <Interface_InterfaceModel.hxx>
+#include <Interface_Check.hxx>
 #include <XSControl_WorkSession.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Shape.hxx>
@@ -58,8 +59,22 @@ namespace
 
         std::cerr << "  Interface entities: " << model->NbEntities() << std::endl;
         std::cerr << "  Roots available: " << reader.NbRootsForTransfer() << std::endl;
-        std::cerr << "  OCCT checks:" << std::endl;
-        reader.PrintCheck(std::cerr, IFSelect_ItemsByEntity, Standard_False);
+
+        const Standard_Integer errorCount = model->NbErrors();
+        const Standard_Integer warningCount = model->NbWarnings();
+        std::cerr << "  Model errors: " << errorCount << std::endl;
+        std::cerr << "  Model warnings: " << warningCount << std::endl;
+
+        for (Standard_Integer entity = 1; entity <= model->NbEntities(); ++entity)
+        {
+            Handle(Interface_Check) check = model->Check(entity);
+            if (!check.IsNull() && (check->NbFails() > 0 || check->NbWarnings() > 0))
+            {
+                std::cerr << "  Entity #" << entity
+                          << " fails=" << check->NbFails()
+                          << " warnings=" << check->NbWarnings() << std::endl;
+            }
+        }
     }
 
     void writeJson(const std::string& path, const std::string& stepPath, const TopoDS_Shape& shape, Standard_Integer roots, Standard_Integer transferred)
