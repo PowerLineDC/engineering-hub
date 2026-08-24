@@ -81,23 +81,45 @@ function splitMonolithicModel(source: THREE.Object3D) {
 
   const size = box.getSize(new THREE.Vector3())
   const min = box.min.clone()
+  const max = box.max.clone()
   const yHeight = Math.max(size.y, 1)
-  const roofY = min.y + yHeight * 0.82
-  const baseY = min.y + yHeight * 0.16
-  const postMinY = min.y + yHeight * 0.08
-  const postMaxY = min.y + yHeight * 0.92
-  const xMid = (min.x + box.max.x) / 2
-  const zMid = (min.z + box.max.z) / 2
-  const xQuarter = Math.max(size.x * 0.28, 1)
-  const zQuarter = Math.max(size.z * 0.28, 1)
+  const xMid = (min.x + max.x) / 2
+  const zMid = (min.z + max.z) / 2
+
+  // Important: do not cut a physical part by an arbitrary horizontal plane.
+  // The previous implementation did exactly that and split the four posts
+  // when the roof was selected. For this temporary monolithic OBJ we only
+  // classify complete triangles: roof by its top region + surface normal,
+  // base by its bottom region, posts by their corner position. Everything
+  // else stays fixed.
+  const roofY = min.y + yHeight * 0.86
+  const baseY = min.y + yHeight * 0.14
+  const postMinY = min.y + yHeight * 0.10
+  const postMaxY = min.y + yHeight * 0.90
+  const cornerX = Math.max(size.x * 0.38, 1)
+  const cornerZ = Math.max(size.z * 0.38, 1)
+  const postHalfX = Math.max(size.x * 0.10, 1)
+  const postHalfZ = Math.max(size.z * 0.10, 1)
 
   const material = new THREE.MeshStandardMaterial({ color: 0x9da8b2, metalness: 0.45, roughness: 0.42, side: THREE.DoubleSide })
   const parts: CadPart[] = []
 
-  const roofGeometry = buildPartGeometry(sourceGeometry, (a, b, c) => ((a.y + b.y + c.y) / 3) >= roofY)
+  const roofGeometry = buildPartGeometry(sourceGeometry, (a, b, c) => {
+    const center = new THREE.Vector3().add(a).add(b).add(c).multiplyScalar(1 / 3)
+    if (center.y < roofY) return false
+    const ab = new THREE.Vector3().subVectors(b, a)
+    const ac = new THREE.Vector3().subVectors(c, a)
+    const normal = new THREE.Vector3().crossVectors(ab, ac).normalize()
+    // Horizontal roof faces are safe to move; vertical faces at the roof/post
+    // junction remain fixed instead of being torn from the posts.
+    return Math.abs(normal.y) > 0.55
+  })
   if (roofGeometry) parts.push({ kind: 'roof', object: new THREE.Mesh(roofGeometry, material.clone()), label: 'Крыша' })
 
-  const baseGeometry = buildPartGeometry(sourceGeometry, (a, b, c) => ((a.y + b.y + c.y) / 3) <= baseY)
+  const baseGeometry = buildPartGeometry(sourceGeometry, (a, b, c) => {
+    const centerY = (a.y + b.y + c.y) / 3
+    return centerY <= baseY
+  })
   if (baseGeometry) parts.push({ kind: 'base', object: new THREE.Mesh(baseGeometry, material.clone()), label: 'Основание' })
 
   const corners = [
@@ -105,12 +127,14 @@ function splitMonolithicModel(source: THREE.Object3D) {
   ]
   const postMeshes: THREE.Mesh[] = []
   corners.forEach((corner) => {
+    const targetX = xMid + corner.x * cornerX
+    const targetZ = zMid + corner.z * cornerZ
     const geometry = buildPartGeometry(sourceGeometry, (a, b, c) => {
       const y = (a.y + b.y + c.y) / 3
-      if (y < postMinY || y > postMaxY || y >= roofY || y <= baseY) return false
+      if (y < postMinY || y > postMaxY) return false
       const x = (a.x + b.x + c.x) / 3
       const z = (a.z + b.z + c.z) / 3
-      return Math.abs(x - (xMid + corner.x * xQuarter)) < size.x * 0.18 && Math.abs(z - (zMid + corner.z * zQuarter)) < size.z * 0.18
+      return Math.abs(x - targetX) <= postHalfX && Math.abs(z - targetZ) <= postHalfZ
     })
     if (geometry) postMeshes.push(new THREE.Mesh(geometry, material.clone()))
   })
@@ -122,12 +146,25 @@ function splitMonolithicModel(source: THREE.Object3D) {
     parts.push({ kind: 'posts', object: postGroup, label: '4 стойки' })
   }
 
+  // Keep the source geometry not assigned to a movable class fixed. This is
+  // intentionally conservative: a triangle is never both movable and fixed.
   const otherGeometry = buildPartGeometry(sourceGeometry, (a, b, c) => {
-    const y = (a.y + b.y + c.y) / 3
-    if (y >= roofY || y <= baseY) return false
-    const x = (a.x + b.x + c.x) / 3
-    const z = (a.z + b.z + c.z) / 3
-    return !corners.some((corner) => Math.abs(x - (xMid + corner.x * xQuarter)) < size.x * 0.18 && Math.abs(z - (zMid + corner.z * zQuarter)) < size.z * 0.18)
+    const center = new THREE.Vector3().add(a).add(b).add(c).multiplyScalar(1 / 3)
+    const y = center.y
+    if (y <= baseY) return false
+    if (y >= roofY) {
+      const ab = new THREE.Vector3().subVectors(b, a)
+      const ac = new THREE.Vector3().subVectors(c, a)
+      const normal = new THREE.Vector3().crossVectors(ab, ac).normalize()
+      if (Math.abs(normal.y) > 0.55) return false
+    }
+    if (y < postMinY || y > postMaxY) return true
+    const isPost = corners.some((corner) => {
+      const targetX = xMid + corner.x * cornerX
+      const targetZ = zMid + corner.z * cornerZ
+      return Math.abs(center.x - targetX) <= postHalfX && Math.abs(center.z - targetZ) <= postHalfZ
+    })
+    return !isPost
   })
   if (otherGeometry) parts.push({ kind: 'other', object: new THREE.Mesh(otherGeometry, material.clone()), label: 'Прочие элементы' })
 
