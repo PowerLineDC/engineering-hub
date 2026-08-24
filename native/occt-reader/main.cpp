@@ -1,10 +1,12 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 
 #include <STEPControl_Reader.hxx>
 #include <IFSelect_ReturnStatus.hxx>
+#include <TopoDS.hxx>
 #include <TopoDS_Shape.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopAbs.hxx>
@@ -20,15 +22,10 @@
 
 namespace
 {
-    void writeJson(const std::string& path,
-                   const std::string& stepPath,
-                   const TopoDS_Shape& shape,
-                   Standard_Integer roots,
-                   Standard_Integer transferred)
+    void writeJson(const std::string& path, const std::string& stepPath, const TopoDS_Shape& shape, Standard_Integer roots, Standard_Integer transferred)
     {
         Bnd_Box box;
         BRepBndLib::Add(shape, box);
-
         Standard_Real xmin, ymin, zmin, xmax, ymax, zmax;
         box.Get(xmin, ymin, zmin, xmax, ymax, zmax);
 
@@ -43,16 +40,11 @@ namespace
         for (TopExp_Explorer it(shape, TopAbs_FACE); it.More(); it.Next()) ++faces;
 
         std::ofstream out(path, std::ios::trunc);
-        if (!out)
-        {
-            throw std::runtime_error("Cannot write JSON: " + path);
-        }
+        if (!out) throw std::runtime_error("Cannot write JSON: " + path);
 
         const auto escapeJson = [](const std::string& value) {
             std::string result;
-            result.reserve(value.size());
-            for (char c : value)
-            {
+            for (char c : value) {
                 if (c == '\\') result += "\\\\";
                 else if (c == '"') result += "\\\"";
                 else result += c;
@@ -80,22 +72,16 @@ namespace
     void writeObj(const std::string& path, const TopoDS_Shape& shape)
     {
         BRepMesh_IncrementalMesh mesher(shape, 0.5, Standard_False, 0.5, Standard_True);
-        if (!mesher.IsDone())
-        {
-            throw std::runtime_error("OCCT triangulation failed");
-        }
+        if (!mesher.IsDone()) throw std::runtime_error("OCCT triangulation failed");
 
         std::ofstream out(path, std::ios::trunc);
-        if (!out)
-        {
-            throw std::runtime_error("Cannot write OBJ: " + path);
-        }
+        if (!out) throw std::runtime_error("Cannot write OBJ: " + path);
 
         out << std::setprecision(9);
         out << "# Engineering Hub / Open CASCADE tessellation\n";
 
         Standard_Integer vertexOffset = 1;
-        Standard_Integer faceIndex = 0;
+        Standard_Integer triangleCount = 0;
 
         for (TopExp_Explorer it(shape, TopAbs_FACE); it.More(); it.Next())
         {
@@ -106,7 +92,6 @@ namespace
 
             const gp_Trsf transform = location.Transformation();
             const Standard_Integer nodes = triangulation->NbNodes();
-
             for (Standard_Integer i = 1; i <= nodes; ++i)
             {
                 const gp_Pnt point = triangulation->Node(i).Transformed(transform);
@@ -119,17 +104,13 @@ namespace
                 Standard_Integer n1, n2, n3;
                 triangulation->Triangle(i).Get(n1, n2, n3);
                 if (reversed) std::swap(n2, n3);
-                out << "f "
-                    << vertexOffset + n1 - 1 << " "
-                    << vertexOffset + n2 - 1 << " "
-                    << vertexOffset + n3 - 1 << "\n";
-                ++faceIndex;
+                out << "f " << vertexOffset + n1 - 1 << " " << vertexOffset + n2 - 1 << " " << vertexOffset + n3 - 1 << "\n";
+                ++triangleCount;
             }
-
             vertexOffset += nodes;
         }
 
-        std::cerr << "OBJ triangles: " << faceIndex << std::endl;
+        std::cerr << "OBJ triangles: " << triangleCount << std::endl;
     }
 }
 
@@ -147,7 +128,6 @@ int main(int argc, char* argv[])
 
     STEPControl_Reader reader;
     const IFSelect_ReturnStatus status = reader.ReadFile(filePath.c_str());
-
     if (status != IFSelect_RetDone)
     {
         std::cerr << "STEP read failed. Status: " << status << std::endl;
@@ -157,7 +137,6 @@ int main(int argc, char* argv[])
     const Standard_Integer roots = reader.NbRootsForTransfer();
     const Standard_Integer transferred = reader.TransferRoots();
     const TopoDS_Shape shape = reader.OneShape();
-
     if (shape.IsNull())
     {
         std::cerr << "Resulting shape is null" << std::endl;
