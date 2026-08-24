@@ -5,6 +5,7 @@
 #include <string>
 #include <filesystem>
 #include <algorithm>
+#include <cstdio>
 
 #include <STEPControl_Reader.hxx>
 #include <IFSelect_ReturnStatus.hxx>
@@ -65,18 +66,11 @@ namespace
 
         std::cerr << "RAW STEP prefix bytes: " << prefix.size() << std::endl;
         std::cerr << "RAW STEP prefix: " << printablePrefix(prefix.substr(0, 160)) << std::endl;
-
-        const bool isoHeader = prefix.rfind("ISO-10303-21", 0) == 0;
-        const bool hasHeader = prefix.find("HEADER;") != std::string::npos;
-        const bool hasData = prefix.find("DATA;") != std::string::npos;
-        const bool hasEndsec = prefix.find("ENDSEC;") != std::string::npos;
-        const bool hasEnd = prefix.find("END-ISO-10303-21") != std::string::npos;
-
-        std::cerr << "RAW STEP ISO-10303-21 at byte 0: " << (isoHeader ? "yes" : "no") << std::endl;
-        std::cerr << "RAW STEP HEADER section in prefix: " << (hasHeader ? "yes" : "no") << std::endl;
-        std::cerr << "RAW STEP DATA section in prefix: " << (hasData ? "yes" : "no") << std::endl;
-        std::cerr << "RAW STEP ENDSEC in prefix: " << (hasEndsec ? "yes" : "no") << std::endl;
-        std::cerr << "RAW STEP END-ISO marker in prefix: " << (hasEnd ? "yes" : "no") << std::endl;
+        std::cerr << "RAW STEP ISO-10303-21 at byte 0: " << (prefix.rfind("ISO-10303-21", 0) == 0 ? "yes" : "no") << std::endl;
+        std::cerr << "RAW STEP HEADER section in prefix: " << (prefix.find("HEADER;") != std::string::npos ? "yes" : "no") << std::endl;
+        std::cerr << "RAW STEP DATA section in prefix: " << (prefix.find("DATA;") != std::string::npos ? "yes" : "no") << std::endl;
+        std::cerr << "RAW STEP ENDSEC in prefix: " << (prefix.find("ENDSEC;") != std::string::npos ? "yes" : "no") << std::endl;
+        std::cerr << "RAW STEP END-ISO marker in prefix: " << (prefix.find("END-ISO-10303-21") != std::string::npos ? "yes" : "no") << std::endl;
 
         input.clear();
         input.seekg(0, std::ios::end);
@@ -88,6 +82,16 @@ namespace
         tail.resize(static_cast<std::size_t>(input.gcount()));
         std::cerr << "RAW STEP tail: " << printablePrefix(tail.substr(tail.size() > 160 ? tail.size() - 160 : 0)) << std::endl;
         std::cerr << "RAW STEP END-ISO marker in tail: " << (tail.find("END-ISO-10303-21") != std::string::npos ? "yes" : "no") << std::endl;
+    }
+
+    std::filesystem::path makeAsciiStepCopy(const std::filesystem::path& source)
+    {
+        const std::filesystem::path tempDir = std::filesystem::temp_directory_path();
+        const std::filesystem::path target = tempDir / "engineeringhub_occt_input.step";
+        std::error_code ec;
+        std::filesystem::copy_file(source, target, std::filesystem::copy_options::overwrite_existing, ec);
+        if (ec) throw std::runtime_error("Cannot create ASCII STEP copy: " + ec.message());
+        return target;
     }
 
     void printReaderDiagnostics(STEPControl_Reader& reader)
@@ -229,15 +233,29 @@ int main(int argc, char* argv[])
     std::cerr << "STEP size: " << fileSize << " bytes" << std::endl;
     inspectRawStepFile(filePath);
 
+    std::filesystem::path asciiStepPath;
+    try
+    {
+        asciiStepPath = makeAsciiStepCopy(std::filesystem::u8path(filePath));
+        std::cerr << "OCCT STEP input copy: " << asciiStepPath.string() << std::endl;
+    }
+    catch (const std::exception& error)
+    {
+        std::cerr << "STEP path normalization failed: " << error.what() << std::endl;
+        return 3;
+    }
+
     STEPControl_Reader reader;
-    const IFSelect_ReturnStatus status = reader.ReadFile(filePath.c_str());
+    const IFSelect_ReturnStatus status = reader.ReadFile(asciiStepPath.string().c_str());
     std::cerr << "STEP ReadFile status: " << static_cast<int>(status) << " (" << statusName(status) << ")" << std::endl;
 
     if (status != IFSelect_RetDone)
     {
         printReaderDiagnostics(reader);
         std::cerr << "STEP read failed. The file was not accepted by OCCT STEPControl_Reader." << std::endl;
-        return 3;
+        std::error_code removeEc;
+        std::filesystem::remove(asciiStepPath, removeEc);
+        return 4;
     }
 
     const Standard_Integer roots = reader.NbRootsForTransfer();
@@ -250,7 +268,9 @@ int main(int argc, char* argv[])
     if (shape.IsNull())
     {
         std::cerr << "Resulting shape is null after successful STEP transfer" << std::endl;
-        return 4;
+        std::error_code removeEc;
+        std::filesystem::remove(asciiStepPath, removeEc);
+        return 5;
     }
 
     try
@@ -260,9 +280,14 @@ int main(int argc, char* argv[])
     }
     catch (const std::exception& error)
     {
+        std::error_code removeEc;
+        std::filesystem::remove(asciiStepPath, removeEc);
         std::cerr << "Geometry processing failed: " << error.what() << std::endl;
-        return 5;
+        return 6;
     }
+
+    std::error_code removeEc;
+    std::filesystem::remove(asciiStepPath, removeEc);
 
     std::cout << "STEP read OK" << std::endl;
     std::cout << "Roots: " << roots << std::endl;
