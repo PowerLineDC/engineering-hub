@@ -5,29 +5,38 @@ import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
 import './CadConfigurator.css'
 
-type CadGeometry = {
-  roots: number
-  transferred: number
-  solids: number
-  shells: number
-  faces: number
-  boundingBox: { min: [number, number, number]; max: [number, number, number]; size: [number, number, number] }
-  volume: number
+type ComponentInfo = {
+  id: string
+  type: 'post' | 'other'
   modelUrl: string
-  stepUrl: string
+  size: [number, number, number]
+  volume: number
+}
+
+type RecognitionResult = {
+  assemblyFile: string
+  referenceFile: string
+  solidCount: number
+  postCount: number
+  components: ComponentInfo[]
+  cacheId: string
 }
 
 const HEIGHTS = [1000, 1200, 1400, 1600, 1800, 2000, 2200]
 const LIBRARY_ROOT = '/library/dkc/Osnovnyye_elementy_korpusa_CQE_N/R5NKMN'
+const REFERENCE_ROOT = `${LIBRARY_ROOT}/1`
 const STEP_FOR_HEIGHT: Record<number, string> = Object.fromEntries(
   HEIGHTS.map((height) => [height, `${LIBRARY_ROOT}/R5NKMN${height / 100}.STEP`]),
+)
+const POST_FOR_HEIGHT: Record<number, string> = Object.fromEntries(
+  HEIGHTS.map((height) => [height, `${REFERENCE_ROOT}/R5NKMN${height / 100} (1шт).step`]),
 )
 
 function CadConfigurator({ onClose }: { onClose: () => void }) {
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const loadModelRef = useRef<((height: number, firstLoad?: boolean) => Promise<void>) | null>(null)
   const [height, setHeight] = useState(2000)
-  const [geometry, setGeometry] = useState<CadGeometry | null>(null)
+  const [recognition, setRecognition] = useState<RecognitionResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState(false)
@@ -37,7 +46,8 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
     if (!viewport) return
 
     let cancelled = false
-    let currentPosts: THREE.Group | null = null
+    let assemblyRoot: THREE.Group | null = null
+    let postsGroup: THREE.Group | null = null
     let animationFrame = 0
 
     const scene = new THREE.Scene()
@@ -83,18 +93,18 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
     }
 
     const selectPosts = () => {
-      if (!currentPosts) return
-      transform.attach(currentPosts)
+      if (!postsGroup) return
+      transform.attach(postsGroup)
       setSelected(true)
     }
 
     const onPointerDown = (event: PointerEvent) => {
-      if (event.button !== 0 || transform.dragging || !currentPosts) return
+      if (event.button !== 0 || transform.dragging || !postsGroup) return
       const rect = renderer.domElement.getBoundingClientRect()
       pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
       pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
       raycaster.setFromCamera(pointer, camera)
-      const hits = raycaster.intersectObject(currentPosts, true)
+      const hits = raycaster.intersectObject(postsGroup, true)
       if (hits.length > 0) selectPosts()
       else {
         transform.detach()
@@ -110,46 +120,55 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
       setSelected(false)
 
       try {
-        const stepUrl = STEP_FOR_HEIGHT[selectedHeight]
-        const response = await fetch(`/api/cad/load?step=${encodeURIComponent(stepUrl)}`)
-        const data = await response.json() as CadGeometry & { error?: string; details?: string }
+        const assemblyUrl = STEP_FOR_HEIGHT[selectedHeight]
+        const referenceUrl = POST_FOR_HEIGHT[selectedHeight]
+        const response = await fetch(`/api/cad/recognize?assembly=${encodeURIComponent(assemblyUrl)}&reference=${encodeURIComponent(referenceUrl)}`)
+        const data = await response.json() as RecognitionResult & { error?: string; details?: string }
         if (!response.ok || data.error) {
           throw new Error(data.details ? `${data.error}: ${data.details}` : data.error || `CAD server error: ${response.status}`)
         }
-        const object = await new OBJLoader().loadAsync(data.modelUrl)
-        if (cancelled) {
-          disposeObject(object)
-          return
-        }
+        if (cancelled) return
 
-        const box = new THREE.Box3().setFromObject(object)
-        const center = box.getCenter(new THREE.Vector3())
-        const size = box.getSize(new THREE.Vector3())
-        object.position.sub(center)
-        grid.position.y = -size.y / 2
-
-        object.traverse((child) => {
-          if (!(child instanceof THREE.Mesh)) return
-          child.material = new THREE.MeshStandardMaterial({
-            color: 0x9da8b2,
-            metalness: 0.45,
-            roughness: 0.42,
-            side: THREE.DoubleSide,
-          })
-        })
-
+        const root = new THREE.Group()
+        root.name = `R5NKMN_${selectedHeight}_ASSEMBLY`
         const posts = new THREE.Group()
         posts.name = 'R5NKMN_FOUR_POSTS'
         posts.userData.partType = 'four-posts'
+        posts.userData.height = selectedHeight
         posts.userData.manufacturer = 'DKC'
         posts.userData.article = `R5NKMN${selectedHeight / 100}`
-        posts.userData.height = selectedHeight
-        posts.add(object)
 
-        if (currentPosts) disposeObject(currentPosts)
-        currentPosts = posts
-        scene.add(posts)
-        setGeometry(data)
+        const loader = new OBJLoader()
+        for (const component of data.components) {
+          const object = await loader.loadAsync(component.modelUrl)
+          object.name = component.id
+          object.userData.partType = component.type
+          object.userData.componentId = component.id
+          object.traverse((child) => {
+            if (!(child instanceof THREE.Mesh)) return
+            child.material = new THREE.MeshStandardMaterial({
+              color: component.type === 'post' ? 0xb7c0c8 : 0x89949f,
+              metalness: 0.45,
+              roughness: 0.42,
+              side: THREE.DoubleSide,
+            })
+          })
+          if (component.type === 'post') posts.add(object)
+          else root.add(object)
+        }
+
+        root.add(posts)
+        scene.add(root)
+        const box = new THREE.Box3().setFromObject(root)
+        const center = box.getCenter(new THREE.Vector3())
+        const size = box.getSize(new THREE.Vector3())
+        root.position.sub(center)
+        grid.position.y = -size.y / 2
+
+        if (assemblyRoot) disposeObject(assemblyRoot)
+        assemblyRoot = root
+        postsGroup = posts
+        setRecognition(data)
 
         if (firstLoad) {
           const maxDimension = Math.max(size.x, size.y, size.z, 1)
@@ -162,7 +181,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
           controls.update()
         }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Не удалось загрузить STEP-модель')
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Не удалось распознать STEP-сборку')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -197,7 +216,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
       transform.detach()
       transform.dispose()
       controls.dispose()
-      if (currentPosts) disposeObject(currentPosts)
+      if (assemblyRoot) disposeObject(assemblyRoot)
       renderer.dispose()
       if (renderer.domElement.parentNode === viewport) viewport.removeChild(renderer.domElement)
     }
@@ -208,8 +227,6 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
     void loadModelRef.current?.(height)
   }, [height])
 
-  const dimension = geometry?.boundingBox.size ?? [0, 0, 0]
-
   return (
     <div className="cad-overlay">
       <div className="cad-shell">
@@ -217,7 +234,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
           <div>
             <div className="cad-kicker">OCCT CAD CORE</div>
             <h2>Конфигуратор НКУ</h2>
-            <div className="cad-file">DKC · 4 стойки · R5NKMN{height / 100}.STEP</div>
+            <div className="cad-file">DKC · распознавание стоек · R5NKMN{height / 100}.STEP</div>
           </div>
           <button className="cad-close" onClick={onClose}>✕</button>
         </header>
@@ -229,7 +246,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
             </select>
           </label>
           <div className="cad-status">
-            {loading ? 'Загрузка STEP через OCCT…' : error ? 'Ошибка' : selected ? 'Выбрано: 4 стойки' : 'ЛКМ по стойке — выбрать 4 стойки'}
+            {loading ? 'OCCT распознаёт стойки…' : error ? 'Ошибка' : selected ? `Выбрано стоек: ${recognition?.postCount ?? 0}` : `Распознано стоек: ${recognition?.postCount ?? 0} · ЛКМ по стойке`}
           </div>
         </div>
 
@@ -241,14 +258,11 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
             <h3>Модель</h3>
             <div className="cad-row"><span>Высота</span><b>{height} мм</b></div>
             <div className="cad-row"><span>Артикул</span><b>R5NKMN{height / 100}</b></div>
-            <div className="cad-row"><span>Объект</span><b>4 стойки</b></div>
+            <div className="cad-row"><span>Solid в STEP</span><b>{recognition?.solidCount ?? '—'}</b></div>
+            <div className="cad-row"><span>Распознано стоек</span><b>{recognition?.postCount ?? '—'}</b></div>
             <div className="cad-divider" />
-            <h3>Размеры OCCT</h3>
-            <div className="cad-stat"><span>X</span><strong>{dimension[0].toFixed(1)} мм</strong></div>
-            <div className="cad-stat"><span>Y</span><strong>{dimension[1].toFixed(1)} мм</strong></div>
-            <div className="cad-stat"><span>Z</span><strong>{dimension[2].toFixed(1)} мм</strong></div>
-            <div className="cad-divider" />
-            <p className="cad-note">ЛКМ по любой из 4 стоек выбирает всю группу стоек. Перемещение вверх, вниз и в стороны. Шаг: 1 мм.</p>
+            <h3>Управление</h3>
+            <p className="cad-note">ЛКМ по любой стойке выбирает все распознанные стойки как одну группу. Перемещение по X/Y/Z с шагом 1 мм. Взаимное расстояние между стойками сохраняется.</p>
           </aside>
         </div>
       </div>
