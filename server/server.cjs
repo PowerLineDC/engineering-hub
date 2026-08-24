@@ -40,6 +40,15 @@ const resolveStepPath = (stepUrl) => {
 
 const cadId = (...parts) => crypto.createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 16)
 
+const runReader = (args) => {
+  try {
+    execFileSync(OCCT_EXE, args, { cwd: ROOT_DIR, windowsHide: true, stdio: 'pipe' })
+    return null
+  } catch (error) {
+    return `${error.stderr?.toString() || ''}\n${error.stdout?.toString() || ''}`.trim()
+  }
+}
+
 const loadCad = (stepUrl) => {
   const stepPath = resolveStepPath(stepUrl)
   if (!stepPath) return { error: 'STEP file must point to an existing /library/*.STEP or /library/*.stp file' }
@@ -48,11 +57,8 @@ const loadCad = (stepUrl) => {
   const jsonPath = path.join(CAD_CACHE_DIR, `${id}.json`)
   const objPath = path.join(CAD_CACHE_DIR, `${id}.obj`)
   if (!fs.existsSync(jsonPath) || !fs.existsSync(objPath)) {
-    try {
-      execFileSync(OCCT_EXE, [stepPath, jsonPath, objPath], { cwd: ROOT_DIR, windowsHide: true, stdio: 'pipe' })
-    } catch (error) {
-      return { error: 'OCCT failed to process STEP', details: `${error.stderr?.toString() || ''}\n${error.stdout?.toString() || ''}`.trim() }
-    }
+    const details = runReader([stepPath, jsonPath, objPath])
+    if (details) return { error: 'OCCT failed to process STEP', details }
   }
   try {
     const geometry = JSON.parse(fs.readFileSync(jsonPath, 'utf8'))
@@ -72,14 +78,17 @@ const loadCadAssembly = (assemblyUrl, referenceUrl) => {
   const jsonPath = path.join(CAD_CACHE_DIR, `${id}.assembly.json`)
   const componentDir = path.join(CAD_CACHE_DIR, `${id}.components`)
   if (!fs.existsSync(jsonPath)) {
-    try {
-      execFileSync(OCCT_EXE, [assemblyPath, jsonPath, '', referencePath, componentDir], { cwd: ROOT_DIR, windowsHide: true, stdio: 'pipe' })
-    } catch (error) {
-      return { error: 'OCCT failed to recognize assembly components', details: `${error.stderr?.toString() || ''}\n${error.stdout?.toString() || ''}`.trim() }
-    }
+    const details = runReader([assemblyPath, jsonPath, '', referencePath, componentDir])
+    if (details) return { error: 'OCCT failed to recognize assembly components', details }
   }
   try {
-    return JSON.parse(fs.readFileSync(jsonPath, 'utf8'))
+    const result = JSON.parse(fs.readFileSync(jsonPath, 'utf8'))
+    result.components = (result.components || []).map(component => ({
+      ...component,
+      modelUrl: `/api/cad/component?id=${id}&file=${encodeURIComponent(path.basename(component.modelUrl.split('file=')[1] || ''))}`,
+    }))
+    result.cacheId = id
+    return result
   } catch {
     return { error: 'OCCT returned invalid assembly JSON' }
   }
@@ -134,14 +143,13 @@ http.createServer((req, res) => {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/cad/component') {
+    const id = url.searchParams.get('id') || ''
     const file = url.searchParams.get('file') || ''
-    if (!/^[a-z]+-\d+\.obj$/i.test(file)) return send(res, 400, { error: 'Invalid component file' })
-    const matches = fs.readdirSync(CAD_CACHE_DIR, { withFileTypes: true }).filter(entry => entry.isDirectory() && entry.name.endsWith('.components'))
-    for (const directory of matches) {
-      const objPath = path.join(CAD_CACHE_DIR, directory.name, file)
-      if (fs.existsSync(objPath)) return send(res, 200, fs.readFileSync(objPath, 'utf8'), 'text/plain; charset=utf-8')
-    }
-    return send(res, 404, { error: 'CAD component not generated' })
+    if (!/^[a-f0-9]{16}$/.test(id) || !/^(?:post|other)-\d+\.obj$/i.test(file)) return send(res, 400, { error: 'Invalid CAD component reference' })
+    const componentDir = path.join(CAD_CACHE_DIR, `${id}.components`)
+    const objPath = path.join(componentDir, file)
+    if (!fs.existsSync(objPath)) return send(res, 404, { error: 'CAD component not generated' })
+    return send(res, 200, fs.readFileSync(objPath, 'utf8'), 'text/plain; charset=utf-8')
   }
 
   send(res, 404, { error: 'Not found' })
