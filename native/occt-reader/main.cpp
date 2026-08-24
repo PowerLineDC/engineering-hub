@@ -3,9 +3,13 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <filesystem>
 
 #include <STEPControl_Reader.hxx>
 #include <IFSelect_ReturnStatus.hxx>
+#include <Interface_Check.hxx>
+#include <Interface_Static.hxx>
+#include <XSControl_WorkSession.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Shape.hxx>
 #include <TopExp_Explorer.hxx>
@@ -22,6 +26,34 @@
 
 namespace
 {
+    const char* statusName(IFSelect_ReturnStatus status)
+    {
+        switch (status)
+        {
+            case IFSelect_RetVoid: return "RetVoid";
+            case IFSelect_RetDone: return "RetDone";
+            case IFSelect_RetError: return "RetError";
+            case IFSelect_RetFail: return "RetFail";
+            case IFSelect_RetStop: return "RetStop";
+            default: return "Unknown";
+        }
+    }
+
+    void printReaderDiagnostics(STEPControl_Reader& reader)
+    {
+        std::cerr << "STEP diagnostics:" << std::endl;
+        std::cerr << "  File: " << std::filesystem::absolute(std::filesystem::path(reader.WS()->Model()->Name())) << std::endl;
+        std::cerr << "  Roots available: " << reader.NbRootsForTransfer() << std::endl;
+        std::cerr << "  Transfer roots: " << reader.NbRootsForTransfer() << std::endl;
+
+        Handle(XSControl_WorkSession) ws = reader.WS();
+        if (!ws.IsNull() && !ws->Model().IsNull())
+        {
+            Handle(Interface_InterfaceModel) model = ws->Model();
+            std::cerr << "  Entities: " << model->NbEntities() << std::endl;
+        }
+    }
+
     void writeJson(const std::string& path, const std::string& stepPath, const TopoDS_Shape& shape, Standard_Integer roots, Standard_Integer transferred)
     {
         Bnd_Box box;
@@ -47,6 +79,8 @@ namespace
             for (char c : value) {
                 if (c == '\\') result += "\\\\";
                 else if (c == '"') result += "\\\"";
+                else if (c == '\n') result += "\\n";
+                else if (c == '\r') result += "\\r";
                 else result += c;
             }
             return result;
@@ -126,21 +160,39 @@ int main(int argc, char* argv[])
     const std::string jsonPath = argc >= 3 ? argv[2] : "";
     const std::string objPath = argc >= 4 ? argv[3] : "";
 
+    std::error_code ec;
+    const auto fileSize = std::filesystem::file_size(filePath, ec);
+    if (ec)
+    {
+        std::cerr << "Cannot access STEP file: " << filePath << std::endl;
+        std::cerr << "Filesystem error: " << ec.message() << std::endl;
+        return 2;
+    }
+    std::cerr << "STEP file: " << filePath << std::endl;
+    std::cerr << "STEP size: " << fileSize << " bytes" << std::endl;
+
     STEPControl_Reader reader;
     const IFSelect_ReturnStatus status = reader.ReadFile(filePath.c_str());
+    std::cerr << "STEP ReadFile status: " << static_cast<int>(status) << " (" << statusName(status) << ")" << std::endl;
+
     if (status != IFSelect_RetDone)
     {
-        std::cerr << "STEP read failed. Status: " << status << std::endl;
-        return 2;
+        printReaderDiagnostics(reader);
+        std::cerr << "STEP read failed. The file was not accepted by OCCT STEPControl_Reader." << std::endl;
+        return 3;
     }
 
     const Standard_Integer roots = reader.NbRootsForTransfer();
+    std::cerr << "STEP roots: " << roots << std::endl;
+
     const Standard_Integer transferred = reader.TransferRoots();
+    std::cerr << "STEP transferred roots: " << transferred << std::endl;
+
     const TopoDS_Shape shape = reader.OneShape();
     if (shape.IsNull())
     {
-        std::cerr << "Resulting shape is null" << std::endl;
-        return 3;
+        std::cerr << "Resulting shape is null after successful STEP transfer" << std::endl;
+        return 4;
     }
 
     try
@@ -150,8 +202,8 @@ int main(int argc, char* argv[])
     }
     catch (const std::exception& error)
     {
-        std::cerr << error.what() << std::endl;
-        return 4;
+        std::cerr << "Geometry processing failed: " << error.what() << std::endl;
+        return 5;
     }
 
     std::cout << "STEP read OK" << std::endl;
