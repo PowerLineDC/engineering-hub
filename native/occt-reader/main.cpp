@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <string>
 #include <filesystem>
+#include <algorithm>
 
 #include <STEPControl_Reader.hxx>
 #include <IFSelect_ReturnStatus.hxx>
@@ -36,6 +37,57 @@ namespace
             case IFSelect_RetStop: return "RetStop";
             default: return "Unknown";
         }
+    }
+
+    std::string printablePrefix(const std::string& bytes)
+    {
+        std::string result;
+        for (unsigned char c : bytes)
+        {
+            if (c >= 32 && c <= 126) result.push_back(static_cast<char>(c));
+            else result.push_back('.');
+        }
+        return result;
+    }
+
+    void inspectRawStepFile(const std::string& path)
+    {
+        std::ifstream input(path, std::ios::binary);
+        if (!input)
+        {
+            std::cerr << "RAW STEP inspection: cannot open file" << std::endl;
+            return;
+        }
+
+        std::string prefix(4096, '\0');
+        input.read(prefix.data(), static_cast<std::streamsize>(prefix.size()));
+        prefix.resize(static_cast<std::size_t>(input.gcount()));
+
+        std::cerr << "RAW STEP prefix bytes: " << prefix.size() << std::endl;
+        std::cerr << "RAW STEP prefix: " << printablePrefix(prefix.substr(0, 160)) << std::endl;
+
+        const bool isoHeader = prefix.rfind("ISO-10303-21", 0) == 0;
+        const bool hasHeader = prefix.find("HEADER;") != std::string::npos;
+        const bool hasData = prefix.find("DATA;") != std::string::npos;
+        const bool hasEndsec = prefix.find("ENDSEC;") != std::string::npos;
+        const bool hasEnd = prefix.find("END-ISO-10303-21") != std::string::npos;
+
+        std::cerr << "RAW STEP ISO-10303-21 at byte 0: " << (isoHeader ? "yes" : "no") << std::endl;
+        std::cerr << "RAW STEP HEADER section in prefix: " << (hasHeader ? "yes" : "no") << std::endl;
+        std::cerr << "RAW STEP DATA section in prefix: " << (hasData ? "yes" : "no") << std::endl;
+        std::cerr << "RAW STEP ENDSEC in prefix: " << (hasEndsec ? "yes" : "no") << std::endl;
+        std::cerr << "RAW STEP END-ISO marker in prefix: " << (hasEnd ? "yes" : "no") << std::endl;
+
+        input.clear();
+        input.seekg(0, std::ios::end);
+        const std::streamoff totalSize = input.tellg();
+        const std::streamoff tailSize = std::min<std::streamoff>(4096, totalSize);
+        input.seekg(totalSize - tailSize, std::ios::beg);
+        std::string tail(static_cast<std::size_t>(tailSize), '\0');
+        input.read(tail.data(), tailSize);
+        tail.resize(static_cast<std::size_t>(input.gcount()));
+        std::cerr << "RAW STEP tail: " << printablePrefix(tail.substr(tail.size() > 160 ? tail.size() - 160 : 0)) << std::endl;
+        std::cerr << "RAW STEP END-ISO marker in tail: " << (tail.find("END-ISO-10303-21") != std::string::npos ? "yes" : "no") << std::endl;
     }
 
     void printReaderDiagnostics(STEPControl_Reader& reader)
@@ -175,6 +227,7 @@ int main(int argc, char* argv[])
     }
     std::cerr << "STEP file: " << filePath << std::endl;
     std::cerr << "STEP size: " << fileSize << " bytes" << std::endl;
+    inspectRawStepFile(filePath);
 
     STEPControl_Reader reader;
     const IFSelect_ReturnStatus status = reader.ReadFile(filePath.c_str());
