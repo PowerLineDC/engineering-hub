@@ -7,8 +7,7 @@
 
 #include <STEPControl_Reader.hxx>
 #include <IFSelect_ReturnStatus.hxx>
-#include <Interface_Check.hxx>
-#include <Interface_Static.hxx>
+#include <Interface_InterfaceModel.hxx>
 #include <XSControl_WorkSession.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Shape.hxx>
@@ -42,15 +41,20 @@ namespace
     void printReaderDiagnostics(STEPControl_Reader& reader)
     {
         std::cerr << "STEP diagnostics:" << std::endl;
-        std::cerr << "  File: " << std::filesystem::absolute(std::filesystem::path(reader.WS()->Model()->Name())) << std::endl;
         std::cerr << "  Roots available: " << reader.NbRootsForTransfer() << std::endl;
-        std::cerr << "  Transfer roots: " << reader.NbRootsForTransfer() << std::endl;
 
         Handle(XSControl_WorkSession) ws = reader.WS();
-        if (!ws.IsNull() && !ws->Model().IsNull())
+        if (!ws.IsNull())
         {
             Handle(Interface_InterfaceModel) model = ws->Model();
-            std::cerr << "  Entities: " << model->NbEntities() << std::endl;
+            if (!model.IsNull())
+                std::cerr << "  Entities loaded: " << model->NbEntities() << std::endl;
+            else
+                std::cerr << "  No STEP interface model is available." << std::endl;
+        }
+        else
+        {
+            std::cerr << "  No OCCT work session is available." << std::endl;
         }
     }
 
