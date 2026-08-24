@@ -29,7 +29,7 @@ const send = (res, status, data, contentType = 'application/json; charset=utf-8'
 }
 
 const resolveStepPath = (stepUrl) => {
-  if (!stepUrl || !stepUrl.startsWith('/library/') || !/\.step?$/i.test(stepUrl)) return null
+  if (!stepUrl || !stepUrl.startsWith('/library/') || !/\.(?:stp|step)$/i.test(stepUrl)) return null
   const relative = stepUrl.replace(/^\/+/, '')
   const absolute = path.resolve(PUBLIC_DIR, relative.replace(/^library[\\/]/, 'library/'))
   const publicRoot = path.resolve(PUBLIC_DIR) + path.sep
@@ -51,11 +51,7 @@ const loadCad = (stepUrl) => {
 
   if (!fs.existsSync(jsonPath) || !fs.existsSync(objPath)) {
     try {
-      execFileSync(OCCT_EXE, [stepPath, jsonPath, objPath], {
-        cwd: ROOT_DIR,
-        windowsHide: true,
-        stdio: 'pipe',
-      })
+      execFileSync(OCCT_EXE, [stepPath, jsonPath, objPath], { cwd: ROOT_DIR, windowsHide: true, stdio: 'pipe' })
     } catch (error) {
       const stderr = error.stderr ? error.stderr.toString() : ''
       const stdout = error.stdout ? error.stdout.toString() : ''
@@ -73,7 +69,6 @@ const loadCad = (stepUrl) => {
 
 http.createServer((req, res) => {
   if (req.method === 'OPTIONS') return send(res, 204, {})
-
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
 
   if (req.method === 'GET' && url.pathname === '/api/estimate') {
