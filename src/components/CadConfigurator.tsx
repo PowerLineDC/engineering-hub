@@ -29,7 +29,6 @@ type CadPart = {
 function buildPartGeometry(source: THREE.BufferGeometry, triangleFilter: (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) => boolean) {
   const position = source.getAttribute('position')
   if (!position) return null
-
   const sourceIndex = source.getIndex()
   const vertices: number[] = []
   const indices: number[] = []
@@ -75,53 +74,37 @@ function splitMonolithicModel(source: THREE.Object3D) {
   })
   if (!meshes.length) return [] as CadPart[]
 
-  const sourceMesh = meshes[0]
-  const sourceGeometry = sourceMesh.geometry
+  const sourceGeometry = meshes[0].geometry
   sourceGeometry.computeBoundingBox()
   const box = sourceGeometry.boundingBox
   if (!box) return [] as CadPart[]
 
   const size = box.getSize(new THREE.Vector3())
   const min = box.min.clone()
-  const max = box.max.clone()
   const yHeight = Math.max(size.y, 1)
-
-  // The current OCCT OBJ is a single mesh. Until the exporter emits named
-  // assembly components, split the mesh by spatial regions so the configurator
-  // can already manipulate the real roof and the four posts as rigid groups.
   const roofY = min.y + yHeight * 0.82
   const baseY = min.y + yHeight * 0.16
   const postMinY = min.y + yHeight * 0.08
   const postMaxY = min.y + yHeight * 0.92
-  const xMid = (min.x + max.x) / 2
-  const zMid = (min.z + max.z) / 2
+  const xMid = (min.x + box.max.x) / 2
+  const zMid = (min.z + box.max.z) / 2
   const xQuarter = Math.max(size.x * 0.28, 1)
   const zQuarter = Math.max(size.z * 0.28, 1)
 
-  const material = new THREE.MeshStandardMaterial({
-    color: 0x9da8b2,
-    metalness: 0.45,
-    roughness: 0.42,
-    side: THREE.DoubleSide,
-  })
-
+  const material = new THREE.MeshStandardMaterial({ color: 0x9da8b2, metalness: 0.45, roughness: 0.42, side: THREE.DoubleSide })
   const parts: CadPart[] = []
+
   const roofGeometry = buildPartGeometry(sourceGeometry, (a, b, c) => ((a.y + b.y + c.y) / 3) >= roofY)
-  if (roofGeometry) {
-    const roof = new THREE.Mesh(roofGeometry, material.clone())
-    parts.push({ kind: 'roof', object: roof, label: 'Крыша' })
-  }
+  if (roofGeometry) parts.push({ kind: 'roof', object: new THREE.Mesh(roofGeometry, material.clone()), label: 'Крыша' })
 
   const baseGeometry = buildPartGeometry(sourceGeometry, (a, b, c) => ((a.y + b.y + c.y) / 3) <= baseY)
-  if (baseGeometry) {
-    const base = new THREE.Mesh(baseGeometry, material.clone())
-    parts.push({ kind: 'base', object: base, label: 'Основание' })
-  }
+  if (baseGeometry) parts.push({ kind: 'base', object: new THREE.Mesh(baseGeometry, material.clone()), label: 'Основание' })
 
-  const postGroups = [
+  const corners = [
     { x: -1, z: -1 }, { x: -1, z: 1 }, { x: 1, z: -1 }, { x: 1, z: 1 },
   ]
-  postGroups.forEach((corner, index) => {
+  const postMeshes: THREE.Mesh[] = []
+  corners.forEach((corner) => {
     const geometry = buildPartGeometry(sourceGeometry, (a, b, c) => {
       const y = (a.y + b.y + c.y) / 3
       if (y < postMinY || y > postMaxY || y >= roofY || y <= baseY) return false
@@ -129,24 +112,24 @@ function splitMonolithicModel(source: THREE.Object3D) {
       const z = (a.z + b.z + c.z) / 3
       return Math.abs(x - (xMid + corner.x * xQuarter)) < size.x * 0.18 && Math.abs(z - (zMid + corner.z * zQuarter)) < size.z * 0.18
     })
-    if (!geometry) return
-    const post = new THREE.Mesh(geometry, material.clone())
-    parts.push({ kind: 'posts', object: post, label: `Стойка ${index + 1}` })
+    if (geometry) postMeshes.push(new THREE.Mesh(geometry, material.clone()))
   })
 
-  // Keep anything not classified by the current spatial rules visible and fixed.
-  const classifiedRoof = roofY
+  if (postMeshes.length) {
+    const postGroup = new THREE.Group()
+    postGroup.name = 'FourPosts'
+    postMeshes.forEach((post) => postGroup.add(post))
+    parts.push({ kind: 'posts', object: postGroup, label: '4 стойки' })
+  }
+
   const otherGeometry = buildPartGeometry(sourceGeometry, (a, b, c) => {
     const y = (a.y + b.y + c.y) / 3
-    if (y >= classifiedRoof || y <= baseY) return false
+    if (y >= roofY || y <= baseY) return false
     const x = (a.x + b.x + c.x) / 3
     const z = (a.z + b.z + c.z) / 3
-    return !postGroups.some((corner) => Math.abs(x - (xMid + corner.x * xQuarter)) < size.x * 0.18 && Math.abs(z - (zMid + corner.z * zQuarter)) < size.z * 0.18)
+    return !corners.some((corner) => Math.abs(x - (xMid + corner.x * xQuarter)) < size.x * 0.18 && Math.abs(z - (zMid + corner.z * zQuarter)) < size.z * 0.18)
   })
-  if (otherGeometry) {
-    const other = new THREE.Mesh(otherGeometry, material.clone())
-    parts.push({ kind: 'other', object: other, label: 'Прочие элементы' })
-  }
+  if (otherGeometry) parts.push({ kind: 'other', object: new THREE.Mesh(otherGeometry, material.clone()), label: 'Прочие элементы' })
 
   return parts
 }
@@ -189,18 +172,15 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
     scene.add(transform.getHelper())
 
     const parts: CadPart[] = []
-    let selected: CadPart | null = null
     const raycaster = new THREE.Raycaster()
     const pointer = new THREE.Vector2()
 
     const selectPart = (part: CadPart | null) => {
       if (!part || part.kind === 'base' || part.kind === 'other') {
-        selected = null
         transform.detach()
         setSelectedPart(part?.label ?? 'Нет')
         return
       }
-      selected = part
       transform.attach(part.object)
       setSelectedPart(part.label)
     }
@@ -217,7 +197,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
         return
       }
       const hit = intersections[0].object
-      const part = parts.find((item) => item.object === hit || item.object === hit.parent)
+      const part = parts.find((item) => item.object === hit || item.object === hit.parent || item.object === hit.parent?.parent)
       selectPart(part ?? null)
     }
     renderer.domElement.addEventListener('pointerdown', onPointerDown)
@@ -251,8 +231,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
         object.position.sub(center)
         grid.position.y = -size.y / 2
 
-        const splitParts = splitMonolithicModel(object)
-        splitParts.forEach((part) => {
+        splitMonolithicModel(object).forEach((part) => {
           part.object.position.copy(object.position)
           scene.add(part.object)
           parts.push(part)
@@ -340,7 +319,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
             <div className="cad-row"><span>Shell</span><b>{geometry?.shells ?? '—'}</b></div>
             <div className="cad-row"><span>Faces</span><b>{geometry?.faces ?? '—'}</b></div>
             <div className="cad-divider" />
-            <p className="cad-note">ЛКМ выбирает крышу или стойки. Перемещение выполняется только в режиме Translate; основание закреплено на рабочей сетке.</p>
+            <p className="cad-note">ЛКМ выбирает крышу или четыре стойки. Стойки объединены в одну группу и перемещаются только совместно. Основание закреплено на рабочей сетке.</p>
           </aside>
         </div>
       </div>
