@@ -59,15 +59,11 @@ namespace
         std::cerr << "  Interface entities: " << model->NbEntities() << std::endl;
         std::cerr << "  Roots available: " << reader.NbRootsForTransfer() << std::endl;
 
-        for (Standard_Integer entity = 1; entity <= model->NbEntities(); ++entity)
+        const Handle(Interface_Check) check = model->Check();
+        if (!check.IsNull())
         {
-            const Handle(Interface_Check) check = model->Check(entity);
-            if (!check.IsNull() && (check->NbFails() > 0 || check->NbWarnings() > 0))
-            {
-                std::cerr << "  Entity #" << entity
-                          << " fails=" << check->NbFails()
-                          << " warnings=" << check->NbWarnings() << std::endl;
-            }
+            std::cerr << "  Model check failures: " << check->NbFails() << std::endl;
+            std::cerr << "  Model check warnings: " << check->NbWarnings() << std::endl;
         }
     }
 
