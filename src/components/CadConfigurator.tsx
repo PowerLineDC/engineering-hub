@@ -5,49 +5,35 @@ import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
 import './CadConfigurator.css'
 
-type ComponentInfo = {
-  id: string
-  type: 'post' | 'other'
+type CadLoadResult = {
   modelUrl: string
-  size: [number, number, number]
-  volume: number
-}
-
-type RecognitionResult = {
-  assemblyFile: string
-  referenceFile: string
-  solidCount: number
-  postCount: number
-  components: ComponentInfo[]
-  cacheId: string
+  boundingBox?: { size: [number, number, number] }
+  volume?: number
+  id?: string
+  stepUrl?: string
 }
 
 const HEIGHTS = [1000, 1200, 1400, 1600, 1800, 2000, 2200]
-const LIBRARY_ROOT = '/library/dkc/Osnovnyye_elementy_korpusa_CQE_N/R5NKMN'
-const REFERENCE_ROOT = `${LIBRARY_ROOT}/1`
-const STEP_FOR_HEIGHT: Record<number, string> = Object.fromEntries(
-  HEIGHTS.map((height) => [height, `${LIBRARY_ROOT}/R5NKMN${height / 100}.STEP`]),
-)
+const REFERENCE_ROOT = '/library/dkc/Osnovnyye_elementy_korpusa_CQE_N/R5NKMN/1'
 const POST_FOR_HEIGHT: Record<number, string> = Object.fromEntries(
-  HEIGHTS.map((height) => [height, `${REFERENCE_ROOT}/R5NKMN${height / 100} (1шт).step`]),
+  HEIGHTS.map((height) => [height, `${REFERENCE_ROOT}/R5NKMN${height / 100} (1шт).STEP`]),
 )
 
 function CadConfigurator({ onClose }: { onClose: () => void }) {
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const loadModelRef = useRef<((height: number, firstLoad?: boolean) => Promise<void>) | null>(null)
   const [height, setHeight] = useState(2000)
-  const [recognition, setRecognition] = useState<RecognitionResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selected, setSelected] = useState(false)
+  const [selectedPost, setSelectedPost] = useState<number | null>(null)
 
   useEffect(() => {
     const viewport = viewportRef.current
     if (!viewport) return
 
     let cancelled = false
-    let assemblyRoot: THREE.Group | null = null
-    let postsGroup: THREE.Group | null = null
+    let postsRoot: THREE.Group | null = null
+    let selectedObject: THREE.Object3D | null = null
     let animationFrame = 0
 
     const scene = new THREE.Scene()
@@ -92,87 +78,110 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
       scene.remove(object)
     }
 
-    const selectPosts = () => {
-      if (!postsGroup) return
-      transform.attach(postsGroup)
-      setSelected(true)
+    const selectPost = (post: THREE.Object3D, index: number) => {
+      selectedObject = post
+      transform.attach(post)
+      setSelectedPost(index)
     }
 
     const onPointerDown = (event: PointerEvent) => {
-      if (event.button !== 0 || transform.dragging || !postsGroup) return
+      if (event.button !== 0 || transform.dragging || !postsRoot) return
       const rect = renderer.domElement.getBoundingClientRect()
       pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
       pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
       raycaster.setFromCamera(pointer, camera)
-      const hits = raycaster.intersectObject(postsGroup, true)
-      if (hits.length > 0) selectPosts()
-      else {
+
+      const hits = raycaster.intersectObject(postsRoot, true)
+      const hit = hits[0]
+      if (!hit) {
+        selectedObject = null
         transform.detach()
-        setSelected(false)
+        setSelectedPost(null)
+        return
       }
+
+      let post = hit.object
+      while (post.parent && post.parent !== postsRoot) post = post.parent
+      const index = postsRoot.children.indexOf(post)
+      if (index >= 0) selectPost(post, index)
     }
     renderer.domElement.addEventListener('pointerdown', onPointerDown)
 
     const loadModel = async (selectedHeight: number, firstLoad = false) => {
       setLoading(true)
       setError(null)
+      selectedObject = null
       transform.detach()
-      setSelected(false)
+      setSelectedPost(null)
 
       try {
-        const assemblyUrl = STEP_FOR_HEIGHT[selectedHeight]
         const referenceUrl = POST_FOR_HEIGHT[selectedHeight]
-        const response = await fetch(`/api/cad/recognize?assembly=${encodeURIComponent(assemblyUrl)}&reference=${encodeURIComponent(referenceUrl)}`)
-        const data = await response.json() as RecognitionResult & { error?: string; details?: string }
+        const response = await fetch(`/api/cad/load?step=${encodeURIComponent(referenceUrl)}`)
+        const data = await response.json() as CadLoadResult & { error?: string }
         if (!response.ok || data.error) {
-          throw new Error(data.details ? `${data.error}: ${data.details}` : data.error || `CAD server error: ${response.status}`)
+          throw new Error(data.error || `CAD server error: ${response.status}`)
         }
         if (cancelled) return
 
-        const root = new THREE.Group()
-        root.name = `R5NKMN_${selectedHeight}_ASSEMBLY`
-        const posts = new THREE.Group()
-        posts.name = 'R5NKMN_FOUR_POSTS'
-        posts.userData.partType = 'four-posts'
-        posts.userData.height = selectedHeight
-        posts.userData.manufacturer = 'DKC'
-        posts.userData.article = `R5NKMN${selectedHeight / 100}`
-
         const loader = new OBJLoader()
-        for (const component of data.components) {
-          const object = await loader.loadAsync(component.modelUrl)
-          object.name = component.id
-          object.userData.partType = component.type
-          object.userData.componentId = component.id
-          object.traverse((child) => {
+        const source = await loader.loadAsync(data.modelUrl)
+        if (cancelled) return
+
+        const sourceBox = new THREE.Box3().setFromObject(source)
+        const sourceCenter = sourceBox.getCenter(new THREE.Vector3())
+        const sourceSize = sourceBox.getSize(new THREE.Vector3())
+        source.position.sub(sourceCenter)
+
+        const root = new THREE.Group()
+        root.name = `R5NKMN_${selectedHeight}_REFERENCE_POSTS`
+        root.userData.partType = 'four-posts'
+        root.userData.height = selectedHeight
+        root.userData.manufacturer = 'DKC'
+        root.userData.article = `R5NKMN${selectedHeight / 100}`
+
+        const spacingX = Math.max(sourceSize.x * 4, 500)
+        const spacingZ = Math.max(sourceSize.z * 4, 300)
+        const positions: [number, number, number][] = [
+          [-spacingX / 2, 0, -spacingZ / 2],
+          [spacingX / 2, 0, -spacingZ / 2],
+          [-spacingX / 2, 0, spacingZ / 2],
+          [spacingX / 2, 0, spacingZ / 2],
+        ]
+
+        positions.forEach(([x, y, z], index) => {
+          const post = source.clone(true)
+          post.name = `REFERENCE_POST_${index + 1}`
+          post.userData.partType = 'post'
+          post.userData.index = index + 1
+          post.userData.height = selectedHeight
+          post.userData.manufacturer = 'DKC'
+          post.userData.article = `R5NKMN${selectedHeight / 100}`
+          post.position.set(x, y, z)
+          post.traverse((child) => {
             if (!(child instanceof THREE.Mesh)) return
             child.material = new THREE.MeshStandardMaterial({
-              color: component.type === 'post' ? 0xb7c0c8 : 0x89949f,
+              color: 0xb7c0c8,
               metalness: 0.45,
               roughness: 0.42,
               side: THREE.DoubleSide,
             })
           })
-          if (component.type === 'post') posts.add(object)
-          else root.add(object)
-        }
+          root.add(post)
+        })
 
-        root.add(posts)
         scene.add(root)
+        grid.position.y = -sourceSize.y / 2
+
         const box = new THREE.Box3().setFromObject(root)
         const center = box.getCenter(new THREE.Vector3())
-        const size = box.getSize(new THREE.Vector3())
         root.position.sub(center)
-        grid.position.y = -size.y / 2
 
-        if (assemblyRoot) disposeObject(assemblyRoot)
-        assemblyRoot = root
-        postsGroup = posts
-        setRecognition(data)
+        if (postsRoot) disposeObject(postsRoot)
+        postsRoot = root
 
         if (firstLoad) {
-          const maxDimension = Math.max(size.x, size.y, size.z, 1)
-          const distance = maxDimension * 1.65
+          const maxDimension = Math.max(sourceSize.y, spacingX, spacingZ, 1)
+          const distance = maxDimension * 2.2
           camera.position.set(distance, distance * 0.8, distance)
           camera.near = Math.max(maxDimension / 10000, 0.1)
           camera.far = maxDimension * 20
@@ -181,7 +190,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
           controls.update()
         }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Не удалось распознать STEP-сборку')
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Не удалось загрузить проверенную модель стойки')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -216,7 +225,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
       transform.detach()
       transform.dispose()
       controls.dispose()
-      if (assemblyRoot) disposeObject(assemblyRoot)
+      if (postsRoot) disposeObject(postsRoot)
       renderer.dispose()
       if (renderer.domElement.parentNode === viewport) viewport.removeChild(renderer.domElement)
     }
@@ -234,7 +243,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
           <div>
             <div className="cad-kicker">OCCT CAD CORE</div>
             <h2>Конфигуратор НКУ</h2>
-            <div className="cad-file">DKC · распознавание стоек · R5NKMN{height / 100}.STEP</div>
+            <div className="cad-file">DKC · проверенная модель стойки · R5NKMN{height / 100} (1шт).STEP</div>
           </div>
           <button className="cad-close" onClick={onClose}>✕</button>
         </header>
@@ -246,7 +255,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
             </select>
           </label>
           <div className="cad-status">
-            {loading ? 'OCCT распознаёт стойки…' : error ? 'Ошибка' : selected ? `Выбрано стоек: ${recognition?.postCount ?? 0}` : `Распознано стоек: ${recognition?.postCount ?? 0} · ЛКМ по стойке`}
+            {loading ? 'OCCT загружает проверенную стойку…' : error ? 'Ошибка' : selectedPost === null ? '4 проверенные стойки · ЛКМ по стойке для перемещения' : `Выбрана стойка ${selectedPost + 1} · перемещение по X/Y/Z`}
           </div>
         </div>
 
@@ -258,11 +267,11 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
             <h3>Модель</h3>
             <div className="cad-row"><span>Высота</span><b>{height} мм</b></div>
             <div className="cad-row"><span>Артикул</span><b>R5NKMN{height / 100}</b></div>
-            <div className="cad-row"><span>Solid в STEP</span><b>{recognition?.solidCount ?? '—'}</b></div>
-            <div className="cad-row"><span>Распознано стоек</span><b>{recognition?.postCount ?? '—'}</b></div>
+            <div className="cad-row"><span>Стойки</span><b>4</b></div>
+            <div className="cad-row"><span>Источник</span><b>OCCT reference</b></div>
             <div className="cad-divider" />
-            <h3>Управление</h3>
-            <p className="cad-note">ЛКМ по любой стойке выбирает все распознанные стойки как одну группу. Перемещение по X/Y/Z с шагом 1 мм. Взаимное расстояние между стойками сохраняется.</p>
+            <h3>Перемещение</h3>
+            <p className="cad-note">Каждая стойка является отдельным объектом. ЛКМ по стойке выбирает её, после чего её можно перемещать по X/Y/Z с шагом 1 мм. Сейчас проверяем независимое перемещение стоек без изменения их геометрии.</p>
           </aside>
         </div>
       </div>
