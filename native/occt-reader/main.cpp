@@ -7,6 +7,7 @@
 
 #include <STEPControl_Reader.hxx>
 #include <IFSelect_ReturnStatus.hxx>
+#include <IFSelect_PrintCount.hxx>
 #include <Interface_InterfaceModel.hxx>
 #include <XSControl_WorkSession.hxx>
 #include <TopoDS.hxx>
@@ -40,22 +41,25 @@ namespace
 
     void printReaderDiagnostics(STEPControl_Reader& reader)
     {
-        std::cerr << "STEP diagnostics:" << std::endl;
-        std::cerr << "  Roots available: " << reader.NbRootsForTransfer() << std::endl;
-
         Handle(XSControl_WorkSession) ws = reader.WS();
-        if (!ws.IsNull())
+        if (ws.IsNull())
         {
-            Handle(Interface_InterfaceModel) model = ws->Model();
-            if (!model.IsNull())
-                std::cerr << "  Entities loaded: " << model->NbEntities() << std::endl;
-            else
-                std::cerr << "  No STEP interface model is available." << std::endl;
+            std::cerr << "  WorkSession: null" << std::endl;
+            return;
         }
-        else
+
+        Handle(Interface_InterfaceModel) model = ws->Model();
+        if (model.IsNull())
         {
-            std::cerr << "  No OCCT work session is available." << std::endl;
+            std::cerr << "  Interface model: null" << std::endl;
+            std::cerr << "  OCCT could not create a STEP interface model from this file." << std::endl;
+            return;
         }
+
+        std::cerr << "  Interface entities: " << model->NbEntities() << std::endl;
+        std::cerr << "  Roots available: " << reader.NbRootsForTransfer() << std::endl;
+        std::cerr << "  OCCT checks:" << std::endl;
+        reader.PrintCheck(std::cerr, IFSelect_ItemsByEntity, Standard_False);
     }
 
     void writeJson(const std::string& path, const std::string& stepPath, const TopoDS_Shape& shape, Standard_Integer roots, Standard_Integer transferred)
