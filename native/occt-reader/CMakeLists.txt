@@ -41,15 +41,33 @@ target_include_directories(occt-reader PRIVATE
 target_link_libraries(occt-reader PRIVATE
     "${OCCT_LIB}/TKDESTEP.lib"
     "${OCCT_LIB}/TKXSBase.lib"
+    "${OCCT_LIB}/TKMesh.lib"
+    "${OCCT_LIB}/TKTopAlgo.lib"
+    "${OCCT_LIB}/TKBRep.lib"
     "${OCCT_LIB}/TKMath.lib"
     "${OCCT_LIB}/TKernel.lib"
 )
 
 add_custom_command(TARGET occt-reader POST_BUILD
-
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${OCCT_BIN}/TKDESTEP.dll"
         "$<TARGET_FILE_DIR:occt-reader>/TKDESTEP.dll"
+
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${OCCT_BIN}/TKXSBase.dll"
+        "$<TARGET_FILE_DIR:occt-reader>/TKXSBase.dll"
+
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${OCCT_BIN}/TKMesh.dll"
+        "$<TARGET_FILE_DIR:occt-reader>/TKMesh.dll"
+
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${OCCT_BIN}/TKTopAlgo.dll"
+        "$<TARGET_FILE_DIR:occt-reader>/TKTopAlgo.dll"
+
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${OCCT_BIN}/TKBRep.dll"
+        "$<TARGET_FILE_DIR:occt-reader>/TKBRep.dll"
 
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${OCCT_BIN}/TKMath.dll"
