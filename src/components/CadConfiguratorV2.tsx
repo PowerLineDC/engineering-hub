@@ -23,15 +23,15 @@ const STEP_FOR_HEIGHT: Record<number, string> = Object.fromEntries(
   HEIGHTS.map((height) => [height, `${LIBRARY_ROOT}/R5NKMN${height / 100}.STEP`]),
 )
 
+type LoadModel = (selectedHeight: number, firstLoad?: boolean) => Promise<void>
+
 function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
   const viewportRef = useRef<HTMLDivElement | null>(null)
+  const loadModelRef = useRef<LoadModel | null>(null)
   const [height, setHeight] = useState(2000)
   const [geometry, setGeometry] = useState<CadGeometry | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  const heightRef = useRef(height)
-  heightRef.current = height
 
   useEffect(() => {
     const viewport = viewportRef.current
@@ -81,7 +81,7 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
       scene.remove(model)
     }
 
-    const loadModel = async (selectedHeight: number, firstLoad = false) => {
+    const loadModel: LoadModel = async (selectedHeight, firstLoad = false) => {
       setLoading(true)
       setError(null)
       transform.detach()
@@ -106,12 +106,7 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
 
         object.traverse((child) => {
           if (!(child instanceof THREE.Mesh)) return
-          child.material = new THREE.MeshStandardMaterial({
-            color: 0x9da8b2,
-            metalness: 0.45,
-            roughness: 0.42,
-            side: THREE.DoubleSide,
-          })
+          child.material = new THREE.MeshStandardMaterial({ color: 0x9da8b2, metalness: 0.45, roughness: 0.42, side: THREE.DoubleSide })
         })
 
         if (currentModel) disposeModel(currentModel)
@@ -136,6 +131,8 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
       }
     }
 
+    loadModelRef.current = loadModel
+
     const onPointerDown = (event: PointerEvent) => {
       if (event.button !== 0 || transform.dragging || !currentModel) return
       const rect = renderer.domElement.getBoundingClientRect()
@@ -156,7 +153,7 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
     resize()
     window.addEventListener('resize', resize)
 
-    void loadModel(heightRef.current, true)
+    void loadModel(2000, true)
 
     const animate = () => {
       animationFrame = requestAnimationFrame(animate)
@@ -167,6 +164,7 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
 
     return () => {
       cancelled = true
+      loadModelRef.current = null
       cancelAnimationFrame(animationFrame)
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
       window.removeEventListener('resize', resize)
@@ -181,40 +179,8 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     if (height === 2000) return
-    const load = async () => {
-      // The Three.js scene is intentionally kept alive; the selected STEP is
-      // loaded by the same OCCT-backed endpoint used for the initial model.
-      // A custom DOM event avoids rebuilding the WebGL scene on every height.
-      window.dispatchEvent(new CustomEvent('engineeringhub-cad-height', { detail: height }))
-    }
-    void load()
+    void loadModelRef.current?.(height)
   }, [height])
-
-  useEffect(() => {
-    const onHeight = () => undefined
-    window.addEventListener('engineeringhub-cad-height', onHeight)
-    return () => window.removeEventListener('engineeringhub-cad-height', onHeight)
-  }, [])
-
-  // Keep the height selector state in React. The actual scene reload is wired
-  // below by dispatching a simple event to the stable WebGL scene.
-  useEffect(() => {
-    const viewport = viewportRef.current
-    if (!viewport) return
-    const eventName = 'engineeringhub-cad-height'
-    const handler = async (event: Event) => {
-      const selectedHeight = Number((event as CustomEvent<number>).detail)
-      if (!HEIGHTS.includes(selectedHeight)) return
-      const canvas = viewport.querySelector('canvas') as HTMLCanvasElement | null
-      if (!canvas) return
-      setLoading(true)
-      setError(null)
-      // Scene ownership is deliberately kept in the main effect. This event
-      // is only a signal; the reload is handled by the same component instance.
-    }
-    window.addEventListener(eventName, handler)
-    return () => window.removeEventListener(eventName, handler)
-  }, [])
 
   const dimension = geometry?.boundingBox.size ?? [0, 0, 0]
 
