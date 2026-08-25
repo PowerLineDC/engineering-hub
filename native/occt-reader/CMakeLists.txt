@@ -19,11 +19,30 @@ endforeach()
 list(REMOVE_DUPLICATES OCCT_INCLUDE_PATHS)
 
 add_executable(occt-reader main.cpp)
+add_executable(occt-xde-reader xde-reader.cpp)
 
 target_include_directories(occt-reader PRIVATE ${OCCT_INCLUDE_PATHS})
+target_include_directories(occt-xde-reader PRIVATE ${OCCT_INCLUDE_PATHS})
 
 target_link_libraries(occt-reader PRIVATE
     "${OCCT_LIB}/TKDESTEP.lib"
+    "${OCCT_LIB}/TKXSBase.lib"
+    "${OCCT_LIB}/TKMesh.lib"
+    "${OCCT_LIB}/TKTopAlgo.lib"
+    "${OCCT_LIB}/TKGeomAlgo.lib"
+    "${OCCT_LIB}/TKGeomBase.lib"
+    "${OCCT_LIB}/TKBRep.lib"
+    "${OCCT_LIB}/TKG3d.lib"
+    "${OCCT_LIB}/TKMath.lib"
+    "${OCCT_LIB}/TKernel.lib"
+)
+
+target_link_libraries(occt-xde-reader PRIVATE
+    "${OCCT_LIB}/TKDESTEP.lib"
+    "${OCCT_LIB}/TKDE.lib"
+    "${OCCT_LIB}/TKXCAF.lib"
+    "${OCCT_LIB}/TKCAF.lib"
+    "${OCCT_LIB}/TKLCAF.lib"
     "${OCCT_LIB}/TKXSBase.lib"
     "${OCCT_LIB}/TKMesh.lib"
     "${OCCT_LIB}/TKTopAlgo.lib"
@@ -41,5 +60,10 @@ foreach(OCCT_DLL ${OCCT_RUNTIME_DLLS})
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${OCCT_DLL}"
             "$<TARGET_FILE_DIR:occt-reader>/"
+    )
+    add_custom_command(TARGET occt-xde-reader POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${OCCT_DLL}"
+            "$<TARGET_FILE_DIR:occt-xde-reader>/"
     )
 endforeach()
