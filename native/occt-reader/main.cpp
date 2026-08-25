@@ -82,17 +82,40 @@ void writeObj(const std::string& path,const TopoDS_Shape& shape) {
     }
 }
 
+std::string jsonEscape(const std::string& value) {
+    std::string out;
+    out.reserve(value.size()+16);
+    for(unsigned char c : value) {
+        switch(c) {
+            case '"': out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\b': out += "\\b"; break;
+            case '\f': out += "\\f"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default:
+                if(c < 0x20) {
+                    const char* hex="0123456789abcdef";
+                    out += "\\u00";
+                    out += hex[(c>>4)&0x0f];
+                    out += hex[c&0x0f];
+                } else out += static_cast<char>(c);
+        }
+    }
+    return out;
+}
+
 void writeAssemblyJson(const std::string& jsonPath,const std::string& assemblyPath,const std::string& referencePath,const std::filesystem::path& dir,const TopoDS_Shape& assembly,const TopoDS_Shape& reference) {
     const ShapeInfo ref=getInfo(reference); std::vector<ShapeInfo> solids;
     for(TopExp_Explorer it(assembly,TopAbs_SOLID);it.More();it.Next()) solids.push_back(getInfo(it.Current()));
     std::error_code ec; std::filesystem::create_directories(dir,ec); if(ec) throw std::runtime_error("Cannot create component cache: "+ec.message());
     std::vector<int> posts; for(size_t i=0;i<solids.size();++i) if(matchesPost(solids[i],ref)) posts.push_back((int)i);
 
-    // If the STEP exposes four matching solids, these are the four physical posts.
     std::ofstream out(jsonPath,std::ios::trunc); if(!out) throw std::runtime_error("Cannot write assembly JSON");
     out<<std::setprecision(15)<<"{\n";
-    out<<"  \"assemblyFile\": \""<<assemblyPath<<"\",\n";
-    out<<"  \"referenceFile\": \""<<referencePath<<"\",\n";
+    out<<"  \"assemblyFile\": \""<<jsonEscape(assemblyPath)<<"\",\n";
+    out<<"  \"referenceFile\": \""<<jsonEscape(referencePath)<<"\",\n";
     out<<"  \"solidCount\": "<<solids.size()<<",\n";
     out<<"  \"postCount\": "<<posts.size()<<",\n  \"components\": [\n";
     for(size_t i=0;i<solids.size();++i){
