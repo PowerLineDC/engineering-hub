@@ -125,8 +125,9 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
       const scale = distance / Math.max(renderer.domElement.clientWidth, 1)
 
       if (dragAxis === 'z') {
-        // Middle mouse: horizontal mouse movement controls Z in the same direction.
-        selected.position.z = dragOrigin.z + dx * scale
+        // The camera looks at the scene from +Z, so world +Z appears on screen to the left.
+        // Invert the world-Z delta so the object follows horizontal mouse movement on screen.
+        selected.position.z = dragOrigin.z - dx * scale
       } else {
         selected.position.x = dragOrigin.x + dx * scale
         const proposedY = dragOrigin.y - dy * scale
