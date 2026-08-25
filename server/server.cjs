@@ -2,7 +2,7 @@ const http = require('http')
 const fs = require('fs')
 const path = require('path')
 const crypto = require('crypto')
-const { execFileSync } = require('child_process')
+const { spawnSync } = require('child_process')
 
 const HOST = '0.0.0.0'
 const PORT = 3001
@@ -41,12 +41,21 @@ const resolveStepPath = (stepUrl) => {
 const cadId = (...parts) => crypto.createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 16)
 
 const runReader = (args) => {
-  try {
-    execFileSync(OCCT_EXE, args, { cwd: ROOT_DIR, windowsHide: true, stdio: 'pipe' })
-    return null
-  } catch (error) {
-    return `${error.stderr?.toString() || ''}\n${error.stdout?.toString() || ''}`.trim()
+  const result = spawnSync(OCCT_EXE, args, {
+    cwd: ROOT_DIR,
+    windowsHide: true,
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  })
+
+  if (result.error) return `spawn error: ${result.error.message}`
+
+  const stdout = String(result.stdout || '').trim()
+  const stderr = String(result.stderr || '').trim()
+  if (result.status !== 0) {
+    return `exit code ${result.status}${result.signal ? `, signal ${result.signal}` : ''}\n${stderr}\n${stdout}`.trim()
   }
+  return null
 }
 
 const loadCad = (stepUrl) => {
@@ -84,7 +93,8 @@ const loadCadAssembly = (assemblyUrl, referenceUrl) => {
     try {
       const cached = JSON.parse(fs.readFileSync(jsonPath, 'utf8'))
       const components = Array.isArray(cached.components) ? cached.components : []
-      validCache = components.length > 0 && components.every(component => {
+      const posts = components.filter(component => component && component.type === 'post')
+      validCache = components.length > 0 && posts.length > 0 && components.every(component => {
         const modelName = path.basename(String(component.modelUrl || '').split('file=')[1] || '')
         return /^(?:post|other)-\d+\.obj$/i.test(modelName) && fs.existsSync(path.join(componentDir, modelName))
       })
@@ -96,13 +106,27 @@ const loadCadAssembly = (assemblyUrl, referenceUrl) => {
   if (!validCache) {
     fs.rmSync(componentDir, { recursive: true, force: true })
     fs.mkdirSync(componentDir, { recursive: true })
+    fs.rmSync(jsonPath, { force: true })
+    fs.rmSync(objPath, { force: true })
+
     const details = runReader([assemblyPath, jsonPath, objPath, referencePath, componentDir])
-    if (details) return { error: 'OCCT failed to recognize assembly components', details }
+
+    // The reader writes the recognition JSON before finishing component meshes.
+    // Only accept the result when the JSON and every referenced component OBJ exist.
+    if (details) {
+      return { error: 'OCCT failed to recognize assembly components', details }
+    }
   }
 
   try {
     const result = JSON.parse(fs.readFileSync(jsonPath, 'utf8'))
-    result.components = (result.components || []).map(component => ({
+    const components = Array.isArray(result.components) ? result.components : []
+    const posts = components.filter(component => component && component.type === 'post')
+    if (!components.length || !posts.length) {
+      return { error: 'OCCT recognition returned no components', details: `solidCount=${result.solidCount ?? 'unknown'}, postCount=${result.postCount ?? 'unknown'}` }
+    }
+
+    result.components = components.map(component => ({
       ...component,
       modelUrl: `/api/cad/component?id=${id}&file=${encodeURIComponent(path.basename(String(component.modelUrl || '').split('file=')[1] || ''))}`,
     }))
