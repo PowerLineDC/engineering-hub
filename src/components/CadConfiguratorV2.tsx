@@ -48,6 +48,7 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
     light.position.set(500, 1000, 700)
     scene.add(light)
     const grid = new THREE.GridHelper(4000, 40, 0x3a4652, 0x26303a)
+    grid.position.y = 0
     scene.add(grid)
     const raycaster = new THREE.Raycaster()
     const pointer = new THREE.Vector2()
@@ -93,6 +94,20 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
       setSelectedPost(index)
     }
 
+    // Returns the minimum world-space Y of the selected object's geometry
+    // after applying a proposed group Y. The working-space grid is absolute Y=0.
+    const getMinWorldYAt = (group: THREE.Group, proposedY: number) => {
+      const currentBox = new THREE.Box3().setFromObject(group)
+      const localMinY = currentBox.min.y - group.position.y
+      return proposedY + localMinY
+    }
+
+    const clampGroupYToFloor = (group: THREE.Group, proposedY: number) => {
+      const currentBox = new THREE.Box3().setFromObject(group)
+      const localMinY = currentBox.min.y - group.position.y
+      return Math.max(proposedY, -localMinY)
+    }
+
     const onPointerDown = (e: PointerEvent) => {
       if (e.button !== 0 || dragging) return
       pointerNdc(e)
@@ -114,15 +129,13 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
       const distance = Math.max(camera.position.distanceTo(controls.target), 1)
       const scale = distance / Math.max(renderer.domElement.clientWidth, 1)
 
-      // Screen X maps directly to world X: mouse right -> post right.
-      // Screen Y maps to world Y with the expected CAD behaviour:
-      // mouse up -> post up, mouse down -> post down.
       if (e.shiftKey) {
         // Shift remains the optional depth (Z) movement.
         selected.position.z = dragOrigin.z + dy * scale
       } else {
         selected.position.x = dragOrigin.x + dx * scale
-        selected.position.y = Math.max(0, dragOrigin.y - dy * scale)
+        const proposedY = dragOrigin.y - dy * scale
+        selected.position.y = clampGroupYToFloor(selected, proposedY)
       }
     }
     const onPointerUp = (e: PointerEvent) => {
@@ -141,7 +154,7 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
       if (e.key === 'ArrowLeft') { selected.position.x -= 1; e.preventDefault() }
       else if (e.key === 'ArrowRight') { selected.position.x += 1; e.preventDefault() }
       else if (e.key === 'ArrowUp') { selected.position.y += 1; e.preventDefault() }
-      else if (e.key === 'ArrowDown') { selected.position.y = Math.max(0, selected.position.y - 1); e.preventDefault() }
+      else if (e.key === 'ArrowDown') { selected.position.y = clampGroupYToFloor(selected, selected.position.y - 1); e.preventDefault() }
     }
     window.addEventListener('keydown', onKeyDown)
 
@@ -182,8 +195,8 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
         components.forEach(g => box.expandByObject(g))
         const size = box.getSize(new THREE.Vector3())
         const center = box.getCenter(new THREE.Vector3())
-        // The working grid is the visual reference only; Y movement is limited by world Y=0.
-        grid.position.y = box.min.y
+        // The working-space grid is the absolute world-space Y=0 plane.
+        grid.position.y = 0
         if (firstLoad) {
           const max = Math.max(size.x, size.y, size.z, 1)
           const distance = max * 1.8
@@ -205,7 +218,7 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
 
   useEffect(() => { if (requestedHeightRef.current !== height) void loadModelRef.current?.(height) }, [height])
 
-  return <div className="cad-overlay"><div className="cad-shell"><header className="cad-header"><div><div className="cad-kicker">OCCT CAD CORE</div><h2>Конфигуратор НКУ</h2><div className="cad-file">DKC · OCCT recognition · R5NKMN{height / 100}.STEP</div></div><button className="cad-close" onClick={onClose}>✕</button></header><div className="cad-toolbar"><label htmlFor="cad-height-select">Высота<select id="cad-height-select" value={height} onChange={e => setHeight(Number(e.target.value))}>{HEIGHTS.map(v => <option key={v} value={v}>{v} мм</option>)}</select></label><div className="cad-status">{loading ? 'OCCT распознаёт STEP-сборку…' : error ? 'Ошибка' : selectedPost === null ? `OCCT: ${recognition?.postCount ?? 0} независимых стоек` : `Выбрана стойка ${selectedPost + 1} · стрелки: 1 мм`}</div></div><div className="cad-main"><div className="cad-viewport" ref={viewportRef}>{error && <div className="cad-error">{error}</div>}</div><aside className="cad-inspector"><h3>OCCT распознавание</h3><div className="cad-row"><span>Солидов</span><b>{recognition?.solidCount ?? '—'}</b></div><div className="cad-row"><span>Стойки</span><b>{recognition?.postCount ?? '—'}</b></div><div className="cad-row"><span>Компонентов</span><b>{recognition?.components.length ?? '—'}</b></div><div className="cad-row"><span>Выбрана</span><b>{selectedPost === null ? '—' : `№${selectedPost + 1}`}</b></div><div className="cad-divider" /><h3>Перемещение</h3><p className="cad-note">Каждая post-* — отдельная сущность, распознанная OCCT. ЛКМ: по X и Y; мышь влево/вправо перемещает стойку в ту же сторону, мышь вверх/вниз — по вертикали. Стойка не может опуститься ниже Y=0. Shift + ЛКМ — по Z; стрелки X/Y — 1 мм.</p></aside></div></div></div>
+  return <div className="cad-overlay"><div className="cad-shell"><header className="cad-header"><div><div className="cad-kicker">OCCT CAD CORE</div><h2>Конфигуратор НКУ</h2><div className="cad-file">DKC · OCCT recognition · R5NKMN{height / 100}.STEP</div></div><button className="cad-close" onClick={onClose}>✕</button></header><div className="cad-toolbar"><label htmlFor="cad-height-select">Высота<select id="cad-height-select" value={height} onChange={e => setHeight(Number(e.target.value))}>{HEIGHTS.map(v => <option key={v} value={v}>{v} мм</option>)}</select></label><div className="cad-status">{loading ? 'OCCT распознаёт STEP-сборку…' : error ? 'Ошибка' : selectedPost === null ? `OCCT: ${recognition?.postCount ?? 0} независимых стоек` : `Выбрана стойка ${selectedPost + 1} · стрелки: 1 мм`}</div></div><div className="cad-main"><div className="cad-viewport" ref={viewportRef}>{error && <div className="cad-error">{error}</div>}</div><aside className="cad-inspector"><h3>OCCT распознавание</h3><div className="cad-row"><span>Солидов</span><b>{recognition?.solidCount ?? '—'}</b></div><div className="cad-row"><span>Стойки</span><b>{recognition?.postCount ?? '—'}</b></div><div className="cad-row"><span>Компонентов</span><b>{recognition?.components.length ?? '—'}</b></div><div className="cad-row"><span>Выбрана</span><b>{selectedPost === null ? '—' : `№${selectedPost + 1}`}</b></div><div className="cad-divider" /><h3>Перемещение</h3><p className="cad-note">Каждая post-* — отдельная сущность, распознанная OCCT. ЛКМ: по X и Y; мышь влево/вправо перемещает стойку в ту же сторону, мышь вверх/вниз — по вертикали. Абсолютный ноль — рабочая сетка Y=0; нижняя точка любой фигуры не может опуститься ниже неё. Shift + ЛКМ — по Z; стрелки X/Y — 1 мм.</p></aside></div></div></div>
 }
 
 export default CadConfiguratorV2
