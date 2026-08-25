@@ -80,19 +80,22 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
 
     const selectPost = (post: THREE.Object3D, index: number) => {
       selectedObject = post
+      transform.detach()
       transform.attach(post)
       setSelectedPost(index)
     }
 
     const onPointerDown = (event: PointerEvent) => {
       if (event.button !== 0 || transform.dragging || !postsRoot) return
+
       const rect = renderer.domElement.getBoundingClientRect()
       pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
       pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
       raycaster.setFromCamera(pointer, camera)
 
-      const hits = raycaster.intersectObject(postsRoot, true)
+      const hits = raycaster.intersectObjects(postsRoot.children, true)
       const hit = hits[0]
+
       if (!hit) {
         selectedObject = null
         transform.detach()
@@ -100,31 +103,34 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
         return
       }
 
-      let post = hit.object
-      while (post.parent && post.parent !== postsRoot) post = post.parent
-      const index = postsRoot.children.indexOf(post)
-      if (index >= 0) selectPost(post, index)
+      let post: THREE.Object3D | null = hit.object
+      while (post.parent && post.parent !== postsRoot) {
+        post = post.parent
+      }
+
+      const index = post.parent === postsRoot ? postsRoot.children.indexOf(post) : -1
+      if (index >= 0) {
+        selectPost(post, index)
+      }
     }
     renderer.domElement.addEventListener('pointerdown', onPointerDown)
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (!selectedObject || event.ctrlKey || event.altKey || event.metaKey) return
 
-      const step = event.shiftKey ? 10 : 1
       let handled = true
-
       switch (event.key) {
         case 'ArrowLeft':
-          selectedObject.position.x -= step
+          selectedObject.position.x -= 1
           break
         case 'ArrowRight':
-          selectedObject.position.x += step
+          selectedObject.position.x += 1
           break
         case 'ArrowUp':
-          selectedObject.position.z -= step
+          selectedObject.position.z -= 1
           break
         case 'ArrowDown':
-          selectedObject.position.z += step
+          selectedObject.position.z += 1
           break
         default:
           handled = false
@@ -196,11 +202,10 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
           root.add(post)
         })
 
-        scene.add(root)
-        grid.position.y = -sourceSize.y / 2
-
         if (postsRoot) disposeObject(postsRoot)
+        scene.add(root)
         postsRoot = root
+        grid.position.y = -sourceSize.y / 2
 
         if (firstLoad) {
           const maxDimension = Math.max(sourceSize.y, spacingX, spacingZ, 1)
@@ -279,7 +284,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
             </select>
           </label>
           <div className="cad-status">
-            {loading ? 'OCCT загружает проверенную стойку…' : error ? 'Ошибка' : selectedPost === null ? '4 проверенные стойки · ЛКМ по стойке для выбора' : `Выбрана стойка ${selectedPost + 1} · мышь или стрелки для перемещения`}
+            {loading ? 'OCCT загружает проверенную стойку…' : error ? 'Ошибка' : selectedPost === null ? 'ЛКМ по стойке для выбора' : `Выбрана стойка ${selectedPost + 1} · перемещение по X/Y/Z`}
           </div>
         </div>
 
@@ -295,7 +300,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
             <div className="cad-row"><span>Источник</span><b>OCCT reference</b></div>
             <div className="cad-divider" />
             <h3>Перемещение</h3>
-            <p className="cad-note">ЛКМ выбирает только одну стойку. После выбора её можно перемещать мышью за оси или клавишами ← → ↑ ↓. Shift увеличивает шаг с 1 до 10 мм. Расстояние до остальных стоек не фиксируется.</p>
+            <p className="cad-note">ЛКМ выбирает одну стойку. Перемещение мышью и стрелками изменяет только её положение. Связи и ограничения между стойками отсутствуют.</p>
           </aside>
         </div>
       </div>
