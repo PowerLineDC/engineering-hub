@@ -39,7 +39,6 @@ target_link_libraries(occt-reader PRIVATE
 
 target_link_libraries(occt-xde-reader PRIVATE
     "${OCCT_LIB}/TKDESTEP.lib"
-    "${OCCT_LIB}/TKDE.lib"
     "${OCCT_LIB}/TKXCAF.lib"
     "${OCCT_LIB}/TKCAF.lib"
     "${OCCT_LIB}/TKLCAF.lib"
