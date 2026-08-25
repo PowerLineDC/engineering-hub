@@ -6,6 +6,7 @@
 #include <string>
 #include <stdexcept>
 #include <algorithm>
+#include <sstream>
 
 #include <IFSelect_ReturnStatus.hxx>
 #include <STEPCAFControl_Reader.hxx>
@@ -78,8 +79,7 @@ std::string labelName(const TDF_Label& label) {
     const Standard_Integer length = name.LengthOfCString();
     if(length <= 0) return {};
     std::vector<char> buffer(static_cast<size_t>(length) + 1, '\0');
-    char* utf8Buffer = buffer.data();
-    name.ToUTF8CString(utf8Buffer);
+    name.ToUTF8CString(buffer.data());
     return std::string(buffer.data());
 }
 
@@ -121,12 +121,12 @@ void writeObj(const std::filesystem::path& path,const TopoDS_Shape& shape) {
         Handle(Poly_Triangulation) tri=BRep_Tool::Triangulation(face,loc);
         if(tri.IsNull()) continue;
         const auto tr=loc.Transformation(); int nodes=tri->NbNodes();
-        for(int n=1;n<=nodes;++n){
+        for(int n=1;n<=nodes;++n) {
             gp_Pnt p=tri->Node(n).Transformed(tr);
             out<<"v "<<p.X()<<" "<<p.Y()<<" "<<p.Z()<<"\n";
         }
         bool rev=face.Orientation()==TopAbs_REVERSED;
-        for(int n=1;n<=tri->NbTriangles();++n){
+        for(int n=1;n<=tri->NbTriangles();++n) {
             int a,b,c; tri->Triangle(n).Get(a,b,c);
             if(rev) std::swap(b,c);
             out<<"f "<<offset+a-1<<" "<<offset+b-1<<" "<<offset+c-1<<"\n";
@@ -231,8 +231,9 @@ int run(const std::filesystem::path& source,
     TDF_LabelSequence roots;
     tool->GetFreeShapes(roots);
 
+    // Always place the diagnostic next to the input STEP, using the STEP filename.
     const std::filesystem::path treePath =
-        jsonPath.parent_path() / (jsonPath.stem().string()+"-xde-tree.txt");
+        source.parent_path() / (source.stem().string()+"-xde-tree.txt");
     writeTree(tool,roots,treePath);
 
     std::vector<TDF_Label> leaves;
