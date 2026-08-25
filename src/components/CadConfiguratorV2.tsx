@@ -113,8 +113,18 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
       const dy = e.clientY - dragStart.y
       const distance = Math.max(camera.position.distanceTo(controls.target), 1)
       const scale = distance / Math.max(renderer.domElement.clientWidth, 1)
-      if (e.shiftKey) selected.position.z = dragOrigin.z + dy * scale
-      else selected.position.x = dragOrigin.x + dx * scale
+
+      // Screen X maps directly to world X: mouse right -> post right.
+      // Screen Y maps to world Y with the expected CAD behaviour:
+      // mouse up -> post up, mouse down -> post down.
+      if (e.shiftKey) {
+        // Shift remains the optional depth (Z) movement.
+        selected.position.z = dragOrigin.z + dy * scale
+      } else {
+        selected.position.x = dragOrigin.x + dx * scale
+        const floorY = grid.position.y
+        selected.position.y = Math.max(floorY, dragOrigin.y - dy * scale)
+      }
     }
     const onPointerUp = (e: PointerEvent) => {
       if (!dragging) return
@@ -131,8 +141,8 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
       if (!selected || e.ctrlKey || e.altKey || e.metaKey) return
       if (e.key === 'ArrowLeft') { selected.position.x -= 1; e.preventDefault() }
       else if (e.key === 'ArrowRight') { selected.position.x += 1; e.preventDefault() }
-      else if (e.key === 'ArrowUp') { selected.position.z -= 1; e.preventDefault() }
-      else if (e.key === 'ArrowDown') { selected.position.z += 1; e.preventDefault() }
+      else if (e.key === 'ArrowUp') { selected.position.y += 1; e.preventDefault() }
+      else if (e.key === 'ArrowDown') { selected.position.y = Math.max(grid.position.y, selected.position.y - 1); e.preventDefault() }
     }
     window.addEventListener('keydown', onKeyDown)
 
@@ -173,6 +183,7 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
         components.forEach(g => box.expandByObject(g))
         const size = box.getSize(new THREE.Vector3())
         const center = box.getCenter(new THREE.Vector3())
+        // The working grid is the lower limit for vertical movement.
         grid.position.y = box.min.y
         if (firstLoad) {
           const max = Math.max(size.x, size.y, size.z, 1)
@@ -195,7 +206,7 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
 
   useEffect(() => { if (requestedHeightRef.current !== height) void loadModelRef.current?.(height) }, [height])
 
-  return <div className="cad-overlay"><div className="cad-shell"><header className="cad-header"><div><div className="cad-kicker">OCCT CAD CORE</div><h2>Конфигуратор НКУ</h2><div className="cad-file">DKC · OCCT recognition · R5NKMN{height / 100}.STEP</div></div><button className="cad-close" onClick={onClose}>✕</button></header><div className="cad-toolbar"><label htmlFor="cad-height-select">Высота<select id="cad-height-select" value={height} onChange={e => setHeight(Number(e.target.value))}>{HEIGHTS.map(v => <option key={v} value={v}>{v} мм</option>)}</select></label><div className="cad-status">{loading ? 'OCCT распознаёт STEP-сборку…' : error ? 'Ошибка' : selectedPost === null ? `OCCT: ${recognition?.postCount ?? 0} независимых стоек` : `Выбрана стойка ${selectedPost + 1} · стрелки: 1 мм`}</div></div><div className="cad-main"><div className="cad-viewport" ref={viewportRef}>{error && <div className="cad-error">{error}</div>}</div><aside className="cad-inspector"><h3>OCCT распознавание</h3><div className="cad-row"><span>Солидов</span><b>{recognition?.solidCount ?? '—'}</b></div><div className="cad-row"><span>Стойки</span><b>{recognition?.postCount ?? '—'}</b></div><div className="cad-row"><span>Компонентов</span><b>{recognition?.components.length ?? '—'}</b></div><div className="cad-row"><span>Выбрана</span><b>{selectedPost === null ? '—' : `№${selectedPost + 1}`}</b></div><div className="cad-divider" /><h3>Перемещение</h3><p className="cad-note">Каждая post-* — отдельная сущность, распознанная OCCT. Используется её собственная геометрия и координаты из результата распознавания. ЛКМ перемещает только выбранную стойку; Shift + ЛКМ — по Z; стрелки — 1 мм.</p></aside></div></div></div>
+  return <div className="cad-overlay"><div className="cad-shell"><header className="cad-header"><div><div className="cad-kicker">OCCT CAD CORE</div><h2>Конфигуратор НКУ</h2><div className="cad-file">DKC · OCCT recognition · R5NKMN{height / 100}.STEP</div></div><button className="cad-close" onClick={onClose}>✕</button></header><div className="cad-toolbar"><label htmlFor="cad-height-select">Высота<select id="cad-height-select" value={height} onChange={e => setHeight(Number(e.target.value))}>{HEIGHTS.map(v => <option key={v} value={v}>{v} мм</option>)}</select></label><div className="cad-status">{loading ? 'OCCT распознаёт STEP-сборку…' : error ? 'Ошибка' : selectedPost === null ? `OCCT: ${recognition?.postCount ?? 0} независимых стоек` : `Выбрана стойка ${selectedPost + 1} · стрелки: 1 мм`}</div></div><div className="cad-main"><div className="cad-viewport" ref={viewportRef}>{error && <div className="cad-error">{error}</div>}</div><aside className="cad-inspector"><h3>OCCT распознавание</h3><div className="cad-row"><span>Солидов</span><b>{recognition?.solidCount ?? '—'}</b></div><div className="cad-row"><span>Стойки</span><b>{recognition?.postCount ?? '—'}</b></div><div className="cad-row"><span>Компонентов</span><b>{recognition?.components.length ?? '—'}</b></div><div className="cad-row"><span>Выбрана</span><b>{selectedPost === null ? '—' : `№${selectedPost + 1}`}</b></div><div className="cad-divider" /><h3>Перемещение</h3><p className="cad-note">Каждая post-* — отдельная сущность, распознанная OCCT. ЛКМ: по X и Y; мышь влево/вправо перемещает стойку в ту же сторону, мышь вверх/вниз — по вертикали. Стойка не может опуститься ниже рабочей сетки. Shift + ЛКМ — по Z; стрелки X/Y — 1 мм.</p></aside></div></div></div>
 }
 
 export default CadConfiguratorV2
