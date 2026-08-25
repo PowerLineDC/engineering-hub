@@ -107,6 +107,33 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
     }
     renderer.domElement.addEventListener('pointerdown', onPointerDown)
 
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!selectedObject || event.ctrlKey || event.altKey || event.metaKey) return
+
+      const step = event.shiftKey ? 10 : 1
+      let handled = true
+
+      switch (event.key) {
+        case 'ArrowLeft':
+          selectedObject.position.x -= step
+          break
+        case 'ArrowRight':
+          selectedObject.position.x += step
+          break
+        case 'ArrowUp':
+          selectedObject.position.z -= step
+          break
+        case 'ArrowDown':
+          selectedObject.position.z += step
+          break
+        default:
+          handled = false
+      }
+
+      if (handled) event.preventDefault()
+    }
+    window.addEventListener('keydown', onKeyDown)
+
     const loadModel = async (selectedHeight: number, firstLoad = false) => {
       setLoading(true)
       setError(null)
@@ -172,10 +199,6 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
         scene.add(root)
         grid.position.y = -sourceSize.y / 2
 
-        const box = new THREE.Box3().setFromObject(root)
-        const center = box.getCenter(new THREE.Vector3())
-        root.position.sub(center)
-
         if (postsRoot) disposeObject(postsRoot)
         postsRoot = root
 
@@ -222,6 +245,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
       cancelAnimationFrame(animationFrame)
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
       window.removeEventListener('resize', resize)
+      window.removeEventListener('keydown', onKeyDown)
       transform.detach()
       transform.dispose()
       controls.dispose()
@@ -255,7 +279,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
             </select>
           </label>
           <div className="cad-status">
-            {loading ? 'OCCT загружает проверенную стойку…' : error ? 'Ошибка' : selectedPost === null ? '4 проверенные стойки · ЛКМ по стойке для перемещения' : `Выбрана стойка ${selectedPost + 1} · перемещение по X/Y/Z`}
+            {loading ? 'OCCT загружает проверенную стойку…' : error ? 'Ошибка' : selectedPost === null ? '4 проверенные стойки · ЛКМ по стойке для выбора' : `Выбрана стойка ${selectedPost + 1} · мышь или стрелки для перемещения`}
           </div>
         </div>
 
@@ -271,7 +295,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
             <div className="cad-row"><span>Источник</span><b>OCCT reference</b></div>
             <div className="cad-divider" />
             <h3>Перемещение</h3>
-            <p className="cad-note">Каждая стойка является отдельным объектом. ЛКМ по стойке выбирает её, после чего её можно перемещать по X/Y/Z с шагом 1 мм. Сейчас проверяем независимое перемещение стоек без изменения их геометрии.</p>
+            <p className="cad-note">ЛКМ выбирает только одну стойку. После выбора её можно перемещать мышью за оси или клавишами ← → ↑ ↓. Shift увеличивает шаг с 1 до 10 мм. Расстояние до остальных стоек не фиксируется.</p>
           </aside>
         </div>
       </div>
