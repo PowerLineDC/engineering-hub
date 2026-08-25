@@ -15,7 +15,6 @@
 #include <TDocStd_Document.hxx>
 #include <TDF_Label.hxx>
 #include <TDF_LabelSequence.hxx>
-#include <TDF_Attribute.hxx>
 #include <TDataStd_Name.hxx>
 #include <TCollection_ExtendedString.hxx>
 #include <TopoDS.hxx>
@@ -55,7 +54,8 @@ std::string labelName(const TDF_Label& label) {
     const Standard_Integer length = name.LengthOfCString();
     if(length <= 0) return {};
     std::vector<char> buffer(static_cast<size_t>(length) + 1, '\0');
-    name.ToUTF8CString(buffer.data());
+    char* utf8Buffer = buffer.data();
+    name.ToUTF8CString(utf8Buffer);
     return std::string(buffer.data());
 }
 
