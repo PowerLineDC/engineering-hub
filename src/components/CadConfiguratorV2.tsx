@@ -95,7 +95,6 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
       setSelectedPost(index)
     }
 
-    // The grid is the absolute world-space floor Y=0.
     const clampGroupYToFloor = (group: THREE.Group, proposedY: number) => {
       const currentBox = new THREE.Box3().setFromObject(group)
       const localMinY = currentBox.min.y - group.position.y
@@ -103,7 +102,6 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
     }
 
     const onPointerDown = (e: PointerEvent) => {
-      // Left mouse: X/Y movement. Middle mouse: Z movement.
       if ((e.button !== 0 && e.button !== 1) || dragging) return
       pointerNdc(e)
       const hit = raycaster.intersectObjects(components, true)[0]
@@ -127,7 +125,7 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
       const scale = distance / Math.max(renderer.domElement.clientWidth, 1)
 
       if (dragAxis === 'z') {
-        selected.position.z = dragOrigin.z + dy * scale
+        selected.position.z = dragOrigin.z - dy * scale
       } else {
         selected.position.x = dragOrigin.x + dx * scale
         const proposedY = dragOrigin.y - dy * scale
@@ -187,7 +185,6 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
           loaded.push(group)
         }
 
-        // Normalize the loaded assembly so that no part appears below the absolute floor Y=0.
         const initialBox = new THREE.Box3()
         loaded.forEach(group => initialBox.expandByObject(group))
         if (initialBox.min.y < 0) {
