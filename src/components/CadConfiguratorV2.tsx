@@ -4,25 +4,52 @@ import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import './CadConfigurator.css'
 
-type ComponentResult = { id: string; type: string; modelUrl: string; position: [number, number, number]; size: [number, number, number] }
+type ComponentResult = { id: string; type: string; name?: string; modelUrl: string; position: [number, number, number]; size: [number, number, number] }
 type RecognitionResult = { assemblyFile: string; referenceFile: string; solidCount: number; postCount: number; components: ComponentResult[]; cacheId: string }
+type XdeResult = { mode: 'XDE/XCAF'; sourceFile: string; rootCount: number; componentCount: number; components: ComponentResult[]; cacheId: string }
+type LibraryFile = { name: string; path: string }
+type LoadModel = (height: number, first?: boolean) => Promise<void>
+type LoadXde = (step: string, first?: boolean) => Promise<void>
 
 const HEIGHTS = [1000, 1200, 1400, 1600, 1800, 2000, 2200]
 const LIBRARY_ROOT = '/library/dkc/Osnovnyye_elementy_korpusa_CQE_N/R5NKMN'
 const ASSEMBLY_FOR_HEIGHT: Record<number, string> = Object.fromEntries(HEIGHTS.map(h => [h, `${LIBRARY_ROOT}/R5NKMN${h / 100}.STEP`]))
 const REFERENCE_FOR_HEIGHT: Record<number, string> = Object.fromEntries(HEIGHTS.map(h => [h, `${LIBRARY_ROOT}/1/R5NKMN${h / 100} (1шт).STEP`]))
 
-type LoadModel = (height: number, first?: boolean) => Promise<void>
-
 function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const loadModelRef = useRef<LoadModel | null>(null)
-  const requestedHeightRef = useRef<number | null>(null)
+  const loadXdeRef = useRef<LoadXde | null>(null)
   const [height] = useState(2000)
   const [recognition, setRecognition] = useState<RecognitionResult | null>(null)
+  const [xdeRecognition, setXdeRecognition] = useState<XdeResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedPost, setSelectedPost] = useState<number | null>(null)
+  const [files, setFiles] = useState<LibraryFile[]>([])
+  const [showFiles, setShowFiles] = useState(false)
+  const [filesLoading, setFilesLoading] = useState(false)
+  const [selectedFile, setSelectedFile] = useState('')
+
+  const openFileList = async () => {
+    setShowFiles(value => !value)
+    if (files.length || filesLoading) return
+    setFilesLoading(true)
+    try {
+      const response = await fetch('/api/cad/files')
+      const data = await response.json() as { files?: LibraryFile[]; error?: string }
+      if (!response.ok || data.error) throw new Error(data.error || 'Не удалось получить список STEP-файлов')
+      setFiles(data.files || [])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось получить список STEP-файлов')
+    } finally { setFilesLoading(false) }
+  }
+
+  const openSelectedFile = async () => {
+    if (!selectedFile || !loadXdeRef.current) return
+    setShowFiles(false)
+    await loadXdeRef.current(selectedFile, true)
+  }
 
   useEffect(() => {
     const viewport = viewportRef.current
@@ -94,7 +121,6 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
       })
       setSelectedPost(index)
     }
-
     const clampGroupYToFloor = (group: THREE.Group, proposedY: number) => {
       const currentBox = new THREE.Box3().setFromObject(group)
       const localMinY = currentBox.min.y - group.position.y
@@ -123,19 +149,12 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
       const dy = e.clientY - dragStart.y
       const distance = Math.max(camera.position.distanceTo(controls.target), 1)
       const scale = distance / Math.max(renderer.domElement.clientWidth, 1)
-
-      if (dragAxis === 'z') {
-        selected.position.z = dragOrigin.z - dx * scale
-      } else {
-        selected.position.x = dragOrigin.x + dx * scale
-        const proposedY = dragOrigin.y - dy * scale
-        selected.position.y = clampGroupYToFloor(selected, proposedY)
-      }
+      if (dragAxis === 'z') selected.position.z = dragOrigin.z - dx * scale
+      else { selected.position.x = dragOrigin.x + dx * scale; selected.position.y = clampGroupYToFloor(selected, dragOrigin.y - dy * scale) }
     }
     const onPointerUp = (e: PointerEvent) => {
       if (!dragging) return
-      dragging = false
-      controls.enabled = true
+      dragging = false; controls.enabled = true
       if (renderer.domElement.hasPointerCapture(e.pointerId)) renderer.domElement.releasePointerCapture(e.pointerId)
     }
     renderer.domElement.addEventListener('pointerdown', onPointerDown)
@@ -153,72 +172,76 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
     }
     window.addEventListener('keydown', onKeyDown)
 
+    const loadComponents = async (data: { components: ComponentResult[] }, firstLoad: boolean, xde: boolean) => {
+      if (cancelled) return
+      const loaded: THREE.Group[] = []
+      for (const component of data.components) {
+        const object = await loader.loadAsync(component.modelUrl)
+        if (cancelled) { dispose(object); return }
+        object.position.set(0, 0, 0)
+        object.traverse(child => {
+          if (!(child instanceof THREE.Mesh)) return
+          child.material = new THREE.MeshStandardMaterial({ color: 0x9da8b2, metalness: 0.45, roughness: 0.42, side: THREE.DoubleSide })
+        })
+        const group = new THREE.Group()
+        group.name = component.name || component.id
+        group.userData.occtId = component.id
+        group.userData.partType = component.type
+        group.userData.componentName = component.name || ''
+        group.userData.occtPosition = component.position
+        group.userData.size = component.size
+        group.add(object)
+        group.position.set(component.position[0], component.position[1], component.position[2])
+        scene.add(group); loaded.push(group)
+      }
+      const initialBox = new THREE.Box3(); loaded.forEach(group => initialBox.expandByObject(group))
+      if (initialBox.min.y < 0) { const offsetY = -initialBox.min.y; loaded.forEach(group => { group.position.y += offsetY }) }
+      components = loaded
+      const box = new THREE.Box3(); components.forEach(g => box.expandByObject(g))
+      const size = box.getSize(new THREE.Vector3()); const center = box.getCenter(new THREE.Vector3())
+      grid.position.y = 0
+      if (firstLoad) {
+        const max = Math.max(size.x, size.y, size.z, 1); const distance = max * 1.8
+        camera.position.set(center.x + distance, center.y + distance * 0.8, center.z + distance)
+        camera.near = Math.max(max / 10000, 0.1); camera.far = max * 20; camera.updateProjectionMatrix(); controls.target.copy(center); controls.update()
+      }
+      if (xde) setXdeRecognition(data as XdeResult)
+    }
+
     const loadModel: LoadModel = async (selectedHeight, firstLoad = false) => {
-      requestedHeightRef.current = selectedHeight
       setLoading(true); setError(null); clear()
       try {
         const response = await fetch(`/api/cad/recognize?assembly=${encodeURIComponent(ASSEMBLY_FOR_HEIGHT[selectedHeight])}&reference=${encodeURIComponent(REFERENCE_FOR_HEIGHT[selectedHeight])}`)
         const data = await response.json() as RecognitionResult & { error?: string; details?: string }
         if (!response.ok || data.error) throw new Error(data.details ? `${data.error}: ${data.details}` : data.error || `OCCT recognition error: ${response.status}`)
-        if (cancelled) return
         const posts = data.components.filter(c => c.type === 'post')
         if (!posts.length) throw new Error(`OCCT не распознал стойки: solidCount=${data.solidCount}, postCount=${data.postCount}`)
-        const loaded: THREE.Group[] = []
-        for (const component of posts) {
-          const object = await loader.loadAsync(component.modelUrl)
-          if (cancelled) { dispose(object); return }
-          object.position.set(0, 0, 0)
-          object.traverse(child => {
-            if (!(child instanceof THREE.Mesh)) return
-            child.material = new THREE.MeshStandardMaterial({ color: 0x9da8b2, metalness: 0.45, roughness: 0.42, side: THREE.DoubleSide })
-          })
-          const group = new THREE.Group()
-          group.name = component.id
-          group.userData.occtId = component.id
-          group.userData.partType = component.type
-          group.userData.article = `R5NKMN${selectedHeight / 100}`
-          group.userData.occtPosition = component.position
-          group.userData.size = component.size
-          group.add(object)
-          group.position.set(component.position[0], component.position[1], component.position[2])
-          scene.add(group)
-          loaded.push(group)
-        }
-
-        const initialBox = new THREE.Box3()
-        loaded.forEach(group => initialBox.expandByObject(group))
-        if (initialBox.min.y < 0) {
-          const offsetY = -initialBox.min.y
-          loaded.forEach(group => { group.position.y += offsetY })
-        }
-
-        components = loaded
-        setRecognition(data)
-        const box = new THREE.Box3()
-        components.forEach(g => box.expandByObject(g))
-        const size = box.getSize(new THREE.Vector3())
-        const center = box.getCenter(new THREE.Vector3())
-        grid.position.y = 0
-        if (firstLoad) {
-          const max = Math.max(size.x, size.y, size.z, 1)
-          const distance = max * 1.8
-          camera.position.set(center.x + distance, center.y + distance * 0.8, center.z + distance)
-          camera.near = Math.max(max / 10000, 0.1); camera.far = max * 20; camera.updateProjectionMatrix()
-          controls.target.copy(center); controls.update()
-        }
+        await loadComponents({ components: posts }, firstLoad, false); setRecognition(data); setXdeRecognition(null)
       } catch (err) { if (!cancelled) setError(err instanceof Error ? err.message : 'Не удалось распознать STEP-сборку через OCCT') }
       finally { if (!cancelled) setLoading(false) }
     }
-    loadModelRef.current = loadModel
+
+    const loadXde: LoadXde = async (step, firstLoad = false) => {
+      setLoading(true); setError(null); clear()
+      try {
+        const response = await fetch(`/api/cad/xde?step=${encodeURIComponent(step)}`)
+        const data = await response.json() as XdeResult & { error?: string; details?: string }
+        if (!response.ok || data.error) throw new Error(data.details ? `${data.error}: ${data.details}` : data.error || `XDE recognition error: ${response.status}`)
+        await loadComponents(data, firstLoad, true)
+        setRecognition(null); setSelectedFile(step)
+      } catch (err) { if (!cancelled) setError(err instanceof Error ? err.message : 'Не удалось разобрать STEP через XDE/XCAF') }
+      finally { if (!cancelled) setLoading(false) }
+    }
+
+    loadModelRef.current = loadModel; loadXdeRef.current = loadXde
     void loadModel(2000, true)
     const resize = () => { const w = viewport.clientWidth; const h = viewport.clientHeight; renderer.setSize(w, h, false); camera.aspect = w / Math.max(h, 1); camera.updateProjectionMatrix() }
     resize(); window.addEventListener('resize', resize)
-    const animate = () => { animationFrame = requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera) }
-    animate()
-    return () => { cancelled = true; loadModelRef.current = null; cancelAnimationFrame(animationFrame); renderer.domElement.removeEventListener('pointerdown', onPointerDown); renderer.domElement.removeEventListener('pointermove', onPointerMove); renderer.domElement.removeEventListener('pointerup', onPointerUp); renderer.domElement.removeEventListener('pointercancel', onPointerUp); window.removeEventListener('resize', resize); window.removeEventListener('keydown', onKeyDown); clear(); controls.dispose(); renderer.dispose(); if (renderer.domElement.parentNode === viewport) viewport.removeChild(renderer.domElement) }
+    const animate = () => { animationFrame = requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera) }; animate()
+    return () => { cancelled = true; loadModelRef.current = null; loadXdeRef.current = null; cancelAnimationFrame(animationFrame); renderer.domElement.removeEventListener('pointerdown', onPointerDown); renderer.domElement.removeEventListener('pointermove', onPointerMove); renderer.domElement.removeEventListener('pointerup', onPointerUp); renderer.domElement.removeEventListener('pointercancel', onPointerUp); window.removeEventListener('resize', resize); window.removeEventListener('keydown', onKeyDown); clear(); controls.dispose(); renderer.dispose(); if (renderer.domElement.parentNode === viewport) viewport.removeChild(renderer.domElement) }
   }, [])
 
-  return <div className="cad-overlay"><div className="cad-shell"><header className="cad-header"><div><div className="cad-kicker">OCCT CAD CORE</div><h2>Конфигуратор НКУ</h2><div className="cad-file">DKC · OCCT recognition · R5NKMN{height / 100}.STEP</div></div><button className="cad-close" onClick={onClose}>✕</button></header><div className="cad-toolbar"><label htmlFor="cad-height-select" className="cad-disabled-control">Высота<select id="cad-height-select" value={height} disabled>{HEIGHTS.map(v => <option key={v} value={v}>{v} мм</option>)}</select></label><button type="button" className="cad-file-button" disabled>File</button><div className="cad-status">{loading ? 'OCCT распознаёт STEP-сборку…' : error ? 'Ошибка' : selectedPost === null ? `OCCT: ${recognition?.postCount ?? 0} независимых стоек` : `Выбрана стойка ${selectedPost + 1} · стрелки: 1 мм`}</div></div><div className="cad-main"><div className="cad-viewport" ref={viewportRef}>{error && <div className="cad-error">{error}</div>}</div><aside className="cad-inspector"><h3>OCCT распознавание</h3><div className="cad-row"><span>Солидов</span><b>{recognition?.solidCount ?? '—'}</b></div><div className="cad-row"><span>Стойки</span><b>{recognition?.postCount ?? '—'}</b></div><div className="cad-row"><span>Компонентов</span><b>{recognition?.components.length ?? '—'}</b></div><div className="cad-row"><span>Выбрана</span><b>{selectedPost === null ? '—' : `№${selectedPost + 1}`}</b></div><div className="cad-divider" /><h3>Перемещение</h3><p className="cad-note">Каждая post-* — отдельная сущность, распознанная OCCT. ЛКМ: X/Y; средняя кнопка мыши: Z. По X: влево/вправо, по Y: вверх/вниз, по Z: влево/вправо. Абсолютный ноль — рабочая сетка Y=0; ниже неё фигуру опустить нельзя. Стрелки X/Y — 1 мм.</p></aside></div></div></div>
+  return <div className="cad-overlay"><div className="cad-shell"><header className="cad-header"><div><div className="cad-kicker">OCCT CAD CORE</div><h2>Конфигуратор НКУ</h2><div className="cad-file">{xdeRecognition ? `XDE/XCAF · ${selectedFile}` : `DKC · OCCT recognition · R5NKMN${height / 100}.STEP`}</div></div><button className="cad-close" onClick={onClose}>✕</button></header><div className="cad-toolbar"><label htmlFor="cad-height-select" className="cad-disabled-control">Высота<select id="cad-height-select" value={height} disabled>{HEIGHTS.map(v => <option key={v} value={v}>{v} мм</option>)}</select></label><div className="cad-file-wrap"><button type="button" className="cad-file-button" onClick={openFileList}>File</button>{showFiles && <div className="cad-file-menu"><div className="cad-file-menu-title">STEP-файлы библиотеки DKC</div>{filesLoading ? <div className="cad-file-menu-loading">Загрузка…</div> : <><select size={10} value={selectedFile} onChange={e => setSelectedFile(e.target.value)}>{files.map(file => <option key={file.path} value={file.path}>{file.path}</option>)}</select><button type="button" className="cad-file-open" disabled={!selectedFile || loading} onClick={openSelectedFile}>Открыть через XDE</button></>}</div>}</div><div className="cad-status">{loading ? 'OCCT/XDE распознаёт STEP-сборку…' : error ? 'Ошибка' : xdeRecognition ? `XDE/XCAF: ${xdeRecognition.componentCount} компонентов` : selectedPost === null ? `OCCT: ${recognition?.postCount ?? 0} независимых стоек` : `Выбрана стойка ${selectedPost + 1} · стрелки: 1 мм`}</div></div><div className="cad-main"><div className="cad-viewport" ref={viewportRef}>{error && <div className="cad-error">{error}</div>}</div><aside className="cad-inspector"><h3>{xdeRecognition ? 'XDE / XCAF' : 'OCCT распознавание'}</h3>{xdeRecognition ? <><div className="cad-row"><span>Корней сборки</span><b>{xdeRecognition.rootCount}</b></div><div className="cad-row"><span>Компонентов</span><b>{xdeRecognition.componentCount}</b></div><div className="cad-row"><span>Файл</span><b title={selectedFile}>{selectedFile.split('/').pop()}</b></div></> : <><div className="cad-row"><span>Солидов</span><b>{recognition?.solidCount ?? '—'}</b></div><div className="cad-row"><span>Стойки</span><b>{recognition?.postCount ?? '—'}</b></div><div className="cad-row"><span>Компонентов</span><b>{recognition?.components.length ?? '—'}</b></div></>}<div className="cad-row"><span>Выбрана</span><b>{selectedPost === null ? '—' : `№${selectedPost + 1}`}</b></div><div className="cad-divider" /><h3>Перемещение</h3><p className="cad-note">ЛКМ: X/Y; средняя кнопка мыши: Z. По X: влево/вправо, по Y: вверх/вниз, по Z: влево/вправо. Абсолютный ноль — рабочая сетка Y=0; ниже неё фигуру опустить нельзя. Стрелки X/Y — 1 мм.</p></aside></div></div></div>
 }
 
 export default CadConfiguratorV2
