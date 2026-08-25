@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import './CadConfigurator.css'
 
@@ -50,7 +51,7 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
     scene.add(grid)
     const raycaster = new THREE.Raycaster()
     const pointer = new THREE.Vector2()
-    const loader = new THREE.OBJLoader()
+    const loader = new OBJLoader()
 
     const dispose = (object: THREE.Object3D) => {
       object.traverse(child => {
@@ -77,7 +78,7 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
       return null
     }
     const select = (group: THREE.Group) => {
-      components.forEach((g, i) => g.traverse(child => {
+      components.forEach(g => g.traverse(child => {
         if (!(child instanceof THREE.Mesh)) return
         const materials = Array.isArray(child.material) ? child.material : [child.material]
         materials.forEach(m => { m.emissive.set(0x000000); m.emissiveIntensity = 0 })
@@ -149,8 +150,6 @@ function CadConfiguratorV2({ onClose }: { onClose: () => void }) {
         for (const component of posts) {
           const object = await loader.loadAsync(component.modelUrl)
           if (cancelled) { dispose(object); return }
-          // component OBJ is exported in assembly coordinates. Do NOT center it and do NOT add size/2.
-          // OCCT's position is the component's actual minimum corner in assembly coordinates.
           object.position.set(0, 0, 0)
           object.traverse(child => {
             if (!(child instanceof THREE.Mesh)) return
