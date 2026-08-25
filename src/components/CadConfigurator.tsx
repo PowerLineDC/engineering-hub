@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
-import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
 import './CadConfigurator.css'
 
 type CadLoadResult = {
@@ -34,6 +33,9 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
     let cancelled = false
     let postsRoot: THREE.Group | null = null
     let selectedObject: THREE.Object3D | null = null
+    let dragPlane: THREE.Plane | null = null
+    let dragOffset = new THREE.Vector3()
+    let draggingPost = false
     let animationFrame = 0
 
     const scene = new THREE.Scene()
@@ -55,18 +57,10 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
     const grid = new THREE.GridHelper(4000, 40, 0x3a4652, 0x26303a)
     scene.add(grid)
 
-    const transform = new TransformControls(camera, renderer.domElement)
-    transform.setMode('translate')
-    transform.setSpace('world')
-    transform.setSize(0.8)
-    transform.setTranslationSnap(1)
-    transform.addEventListener('dragging-changed', (event) => {
-      controls.enabled = !event.value
-    })
-    scene.add(transform.getHelper())
-
     const raycaster = new THREE.Raycaster()
     const pointer = new THREE.Vector2()
+    const dragPoint = new THREE.Vector3()
+    const groundNormal = new THREE.Vector3(0, 1, 0)
 
     const disposeObject = (object: THREE.Object3D) => {
       object.traverse((child) => {
@@ -78,42 +72,84 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
       scene.remove(object)
     }
 
+    const getPointer = (event: PointerEvent) => {
+      const rect = renderer.domElement.getBoundingClientRect()
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
+      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+    }
+
     const selectPost = (post: THREE.Object3D, index: number) => {
       selectedObject = post
-      transform.detach()
-      transform.attach(post)
       setSelectedPost(index)
     }
 
     const onPointerDown = (event: PointerEvent) => {
-      if (event.button !== 0 || transform.dragging || !postsRoot) return
+      if (event.button !== 0 || !postsRoot) return
 
-      const rect = renderer.domElement.getBoundingClientRect()
-      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
-      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+      getPointer(event)
       raycaster.setFromCamera(pointer, camera)
-
       const hits = raycaster.intersectObjects(postsRoot.children, true)
       const hit = hits[0]
 
       if (!hit) {
         selectedObject = null
-        transform.detach()
+        draggingPost = false
         setSelectedPost(null)
         return
       }
 
       let post: THREE.Object3D | null = hit.object
-      while (post.parent && post.parent !== postsRoot) {
-        post = post.parent
-      }
+      while (post.parent && post.parent !== postsRoot) post = post.parent
+      if (post.parent !== postsRoot) return
 
-      const index = post.parent === postsRoot ? postsRoot.children.indexOf(post) : -1
-      if (index >= 0) {
-        selectPost(post, index)
+      const index = postsRoot.children.indexOf(post)
+      if (index < 0) return
+
+      selectPost(post, index)
+
+      const box = new THREE.Box3().setFromObject(post)
+      const center = box.getCenter(new THREE.Vector3())
+      const planeY = box.min.y
+      dragPlane = new THREE.Plane(groundNormal, -planeY)
+
+      raycaster.ray.intersectPlane(dragPlane, dragPoint)
+      dragOffset.copy(center).sub(dragPoint)
+      draggingPost = true
+      controls.enabled = false
+      renderer.domElement.setPointerCapture(event.pointerId)
+      event.preventDefault()
+    }
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (!draggingPost || !selectedObject || !dragPlane) return
+
+      getPointer(event)
+      raycaster.setFromCamera(pointer, camera)
+      if (!raycaster.ray.intersectPlane(dragPlane, dragPoint)) return
+
+      const target = dragPoint.clone().add(dragOffset)
+      const currentWorld = new THREE.Vector3()
+      selectedObject.getWorldPosition(currentWorld)
+      const delta = target.sub(currentWorld)
+      selectedObject.position.x += delta.x
+      selectedObject.position.z += delta.z
+      event.preventDefault()
+    }
+
+    const onPointerUp = (event: PointerEvent) => {
+      if (!draggingPost) return
+      draggingPost = false
+      dragPlane = null
+      controls.enabled = true
+      if (renderer.domElement.hasPointerCapture(event.pointerId)) {
+        renderer.domElement.releasePointerCapture(event.pointerId)
       }
     }
+
     renderer.domElement.addEventListener('pointerdown', onPointerDown)
+    renderer.domElement.addEventListener('pointermove', onPointerMove)
+    renderer.domElement.addEventListener('pointerup', onPointerUp)
+    renderer.domElement.addEventListener('pointercancel', onPointerUp)
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (!selectedObject || event.ctrlKey || event.altKey || event.metaKey) return
@@ -144,7 +180,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
       setLoading(true)
       setError(null)
       selectedObject = null
-      transform.detach()
+      draggingPost = false
       setSelectedPost(null)
 
       try {
@@ -182,7 +218,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
         ]
 
         positions.forEach(([x, y, z], index) => {
-          const post = source.clone(true)
+          const post = new THREE.Group()
           post.name = `REFERENCE_POST_${index + 1}`
           post.userData.partType = 'post'
           post.userData.index = index + 1
@@ -190,7 +226,10 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
           post.userData.manufacturer = 'DKC'
           post.userData.article = `R5NKMN${selectedHeight / 100}`
           post.position.set(x, y, z)
-          post.traverse((child) => {
+
+          const model = source.clone(true)
+          model.position.set(0, 0, 0)
+          model.traverse((child) => {
             if (!(child instanceof THREE.Mesh)) return
             child.material = new THREE.MeshStandardMaterial({
               color: 0xb7c0c8,
@@ -199,6 +238,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
               side: THREE.DoubleSide,
             })
           })
+          post.add(model)
           root.add(post)
         })
 
@@ -249,10 +289,11 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
       loadModelRef.current = null
       cancelAnimationFrame(animationFrame)
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
+      renderer.domElement.removeEventListener('pointermove', onPointerMove)
+      renderer.domElement.removeEventListener('pointerup', onPointerUp)
+      renderer.domElement.removeEventListener('pointercancel', onPointerUp)
       window.removeEventListener('resize', resize)
       window.removeEventListener('keydown', onKeyDown)
-      transform.detach()
-      transform.dispose()
       controls.dispose()
       if (postsRoot) disposeObject(postsRoot)
       renderer.dispose()
@@ -284,7 +325,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
             </select>
           </label>
           <div className="cad-status">
-            {loading ? 'OCCT загружает проверенную стойку…' : error ? 'Ошибка' : selectedPost === null ? 'ЛКМ по стойке для выбора' : `Выбрана стойка ${selectedPost + 1} · перемещение по X/Y/Z`}
+            {loading ? 'OCCT загружает проверенную стойку…' : error ? 'Ошибка' : selectedPost === null ? 'ЛКМ по стойке для выбора и перемещения' : `Выбрана стойка ${selectedPost + 1} · стрелки: 1 мм`}
           </div>
         </div>
 
@@ -300,7 +341,7 @@ function CadConfigurator({ onClose }: { onClose: () => void }) {
             <div className="cad-row"><span>Источник</span><b>OCCT reference</b></div>
             <div className="cad-divider" />
             <h3>Перемещение</h3>
-            <p className="cad-note">ЛКМ выбирает одну стойку. Перемещение мышью и стрелками изменяет только её положение. Связи и ограничения между стойками отсутствуют.</p>
+            <p className="cad-note">ЛКМ по стойке выбирает её и позволяет перетаскивать только выбранную стойку по рабочей плоскости. Стрелки перемещают выбранную стойку на 1 мм по X/Z. Между стойками нет связи.</p>
           </aside>
         </div>
       </div>
