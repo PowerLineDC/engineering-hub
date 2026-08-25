@@ -76,21 +76,40 @@ const loadCadAssembly = (assemblyUrl, referenceUrl) => {
 
   const id = cadId(assemblyUrl, referenceUrl)
   const jsonPath = path.join(CAD_CACHE_DIR, `${id}.assembly.json`)
+  const objPath = path.join(CAD_CACHE_DIR, `${id}.assembly.obj`)
   const componentDir = path.join(CAD_CACHE_DIR, `${id}.components`)
-  if (!fs.existsSync(jsonPath)) {
-    const details = runReader([assemblyPath, jsonPath, '', referencePath, componentDir])
+
+  let validCache = false
+  if (fs.existsSync(jsonPath) && fs.existsSync(componentDir)) {
+    try {
+      const cached = JSON.parse(fs.readFileSync(jsonPath, 'utf8'))
+      const components = Array.isArray(cached.components) ? cached.components : []
+      validCache = components.length > 0 && components.every(component => {
+        const modelName = path.basename(String(component.modelUrl || '').split('file=')[1] || '')
+        return /^(?:post|other)-\d+\.obj$/i.test(modelName) && fs.existsSync(path.join(componentDir, modelName))
+      })
+    } catch {
+      validCache = false
+    }
+  }
+
+  if (!validCache) {
+    fs.rmSync(componentDir, { recursive: true, force: true })
+    fs.mkdirSync(componentDir, { recursive: true })
+    const details = runReader([assemblyPath, jsonPath, objPath, referencePath, componentDir])
     if (details) return { error: 'OCCT failed to recognize assembly components', details }
   }
+
   try {
     const result = JSON.parse(fs.readFileSync(jsonPath, 'utf8'))
     result.components = (result.components || []).map(component => ({
       ...component,
-      modelUrl: `/api/cad/component?id=${id}&file=${encodeURIComponent(path.basename(component.modelUrl.split('file=')[1] || ''))}`,
+      modelUrl: `/api/cad/component?id=${id}&file=${encodeURIComponent(path.basename(String(component.modelUrl || '').split('file=')[1] || ''))}`,
     }))
     result.cacheId = id
     return result
-  } catch {
-    return { error: 'OCCT returned invalid assembly JSON' }
+  } catch (error) {
+    return { error: 'OCCT returned invalid assembly JSON', details: error instanceof Error ? error.message : String(error) }
   }
 }
 
