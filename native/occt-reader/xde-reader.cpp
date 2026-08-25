@@ -16,6 +16,8 @@
 #include <TDF_Label.hxx>
 #include <TDF_LabelSequence.hxx>
 #include <TDataStd_Name.hxx>
+#include <TCollection_ExtendedString.hxx>
+#include <TopoDS.hxx>
 #include <TopoDS_Shape.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopAbs.hxx>
@@ -33,25 +35,22 @@ namespace {
 struct Info { TopoDS_Shape shape; double x=0,y=0,z=0,sx=0,sy=0,sz=0,volume=0; };
 
 Info getInfo(const TopoDS_Shape& shape) {
-    Info i; i.shape=shape;
-    Bnd_Box b; BRepBndLib::Add(shape,b); double minX,minY,minZ,maxX,maxY,maxZ;
-    b.Get(minX,minY,minZ,maxX,maxY,maxZ);
+    Info i; i.shape=shape; Bnd_Box b; BRepBndLib::Add(shape,b);
+    double minX,minY,minZ,maxX,maxY,maxZ; b.Get(minX,minY,minZ,maxX,maxY,maxZ);
     i.x=minX; i.y=minY; i.z=minZ; i.sx=maxX-minX; i.sy=maxY-minY; i.sz=maxZ-minZ;
     GProp_GProps p; BRepGProp::VolumeProperties(shape,p); i.volume=p.Mass(); return i;
 }
 
 std::string jsonEscape(const std::string& s) {
     std::string r; r.reserve(s.size()+16);
-    for(unsigned char c:s) {
-        if(c=='"') r+="\\\""; else if(c=='\\') r+="\\\\"; else if(c=='\n') r+="\\n"; else if(c=='\r') r+="\\r"; else if(c=='\t') r+="\\t"; else r+=char(c);
-    }
+    for(unsigned char c:s) { if(c=='"') r+="\\\""; else if(c=='\\') r+="\\\\"; else if(c=='\n') r+="\\n"; else if(c=='\r') r+="\\r"; else if(c=='\t') r+="\\t"; else r+=char(c); }
     return r;
 }
 
 std::string labelName(const TDF_Label& label) {
     TCollection_ExtendedString name;
-    if(TDataStd_Name::Get(label,name)) return std::string(name.ToExtString());
-    return {};
+    if(!TDataStd_Name::Get(label,name)) return {};
+    return name.ToUTF8CString();
 }
 
 void writeObj(const std::filesystem::path& path,const TopoDS_Shape& shape) {
@@ -60,8 +59,7 @@ void writeObj(const std::filesystem::path& path,const TopoDS_Shape& shape) {
     std::ofstream out(path,std::ios::trunc); if(!out) throw std::runtime_error("Cannot write OBJ: "+path.string());
     out<<std::setprecision(9); int offset=1;
     for(TopExp_Explorer it(shape,TopAbs_FACE);it.More();it.Next()) {
-        const auto face=TopoDS::Face(it.Current()); TopLoc_Location loc;
-        Handle(Poly_Triangulation) tri=BRep_Tool::Triangulation(face,loc); if(tri.IsNull()) continue;
+        const auto face=TopoDS::Face(it.Current()); TopLoc_Location loc; Handle(Poly_Triangulation) tri=BRep_Tool::Triangulation(face,loc); if(tri.IsNull()) continue;
         const auto tr=loc.Transformation(); int nodes=tri->NbNodes();
         for(int n=1;n<=nodes;++n){ gp_Pnt p=tri->Node(n).Transformed(tr); out<<"v "<<p.X()<<" "<<p.Y()<<" "<<p.Z()<<"\n"; }
         bool rev=face.Orientation()==TopAbs_REVERSED;
@@ -71,8 +69,7 @@ void writeObj(const std::filesystem::path& path,const TopoDS_Shape& shape) {
 }
 
 void collectLeaves(const Handle(XCAFDoc_ShapeTool)& tool,const TDF_Label& label,std::vector<TDF_Label>& leaves) {
-    TDF_LabelSequence children;
-    tool->GetComponents(label,children,Standard_False);
+    TDF_LabelSequence children; tool->GetComponents(label,children,Standard_False);
     if(children.Length()==0) { leaves.push_back(label); return; }
     for(Standard_Integer i=1;i<=children.Length();++i) collectLeaves(tool,children.Value(i),leaves);
 }
@@ -80,27 +77,14 @@ void collectLeaves(const Handle(XCAFDoc_ShapeTool)& tool,const TDF_Label& label,
 int run(const std::filesystem::path& source,const std::filesystem::path& jsonPath,const std::filesystem::path& componentDir) {
     if(!std::filesystem::exists(source)) throw std::runtime_error("STEP file not found: "+source.string());
     std::error_code ec; std::filesystem::create_directories(componentDir,ec); if(ec) throw std::runtime_error("Cannot create component directory: "+ec.message());
-
-    Handle(TDocStd_Document) doc;
-    Handle(XCAFApp_Application) app=XCAFApp_Application::GetApplication();
-    app->NewDocument("MDTV-XCAF",doc);
-    STEPCAFControl_Reader reader;
-    reader.SetNameMode(Standard_True); reader.SetColorMode(Standard_True); reader.SetLayerMode(Standard_True); reader.SetPropsMode(Standard_True);
+    Handle(TDocStd_Document) doc; Handle(XCAFApp_Application) app=XCAFApp_Application::GetApplication(); app->NewDocument("MDTV-XCAF",doc);
+    STEPCAFControl_Reader reader; reader.SetNameMode(Standard_True); reader.SetColorMode(Standard_True); reader.SetLayerMode(Standard_True); reader.SetPropsMode(Standard_True);
     if(reader.ReadFile(source.string().c_str())!=IFSelect_RetDone) throw std::runtime_error("XDE STEP ReadFile failed");
     if(!reader.Transfer(doc)) throw std::runtime_error("XDE STEP transfer failed");
-
-    Handle(XCAFDoc_ShapeTool) tool=XCAFDoc_DocumentTool::ShapeTool(doc->Main());
-    TDF_LabelSequence roots; tool->GetFreeShapes(roots);
-    std::vector<TDF_Label> leaves;
-    for(Standard_Integer i=1;i<=roots.Length();++i) collectLeaves(tool,roots.Value(i),leaves);
-
+    Handle(XCAFDoc_ShapeTool) tool=XCAFDoc_DocumentTool::ShapeTool(doc->Main()); TDF_LabelSequence roots; tool->GetFreeShapes(roots);
+    std::vector<TDF_Label> leaves; for(Standard_Integer i=1;i<=roots.Length();++i) collectLeaves(tool,roots.Value(i),leaves);
     std::ofstream out(jsonPath,std::ios::trunc); if(!out) throw std::runtime_error("Cannot write XDE JSON");
-    out<<std::setprecision(15)<<"{\n";
-    out<<"  \"mode\": \"XDE/XCAF\",\n";
-    out<<"  \"sourceFile\": \""<<jsonEscape(source.string())<<"\",\n";
-    out<<"  \"rootCount\": "<<roots.Length()<<",\n";
-    out<<"  \"componentCount\": "<<leaves.size()<<",\n";
-    out<<"  \"components\": [\n";
+    out<<std::setprecision(15)<<"{\n  \"mode\": \"XDE/XCAF\",\n  \"sourceFile\": \""<<jsonEscape(source.string())<<"\",\n  \"rootCount\": "<<roots.Length()<<",\n  \"componentCount\": "<<leaves.size()<<",\n  \"components\": [\n";
     for(size_t i=0;i<leaves.size();++i) {
         TDF_Label label=leaves[i]; TopoDS_Shape shape=tool->GetShape(label); if(shape.IsNull()) continue;
         Info info=getInfo(shape); std::string name=labelName(label); if(name.empty()) name="component-"+std::to_string(i+1);
