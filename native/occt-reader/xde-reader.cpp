@@ -15,6 +15,7 @@
 #include <TDocStd_Document.hxx>
 #include <TDF_Label.hxx>
 #include <TDF_LabelSequence.hxx>
+#include <TDF_Attribute.hxx>
 #include <TDataStd_Name.hxx>
 #include <TCollection_ExtendedString.hxx>
 #include <TopoDS.hxx>
@@ -48,9 +49,14 @@ std::string jsonEscape(const std::string& s) {
 }
 
 std::string labelName(const TDF_Label& label) {
-    TCollection_ExtendedString name;
-    if(!TDataStd_Name::Get(label,name)) return {};
-    return name.ToUTF8CString();
+    Handle(TDataStd_Name) nameAttr;
+    if(!label.FindAttribute(TDataStd_Name::GetID(), nameAttr) || nameAttr.IsNull()) return {};
+    const TCollection_ExtendedString& name = nameAttr->Get();
+    const Standard_Integer length = name.LengthOfCString();
+    if(length <= 0) return {};
+    std::vector<char> buffer(static_cast<size_t>(length) + 1, '\0');
+    name.ToUTF8CString(buffer.data());
+    return std::string(buffer.data());
 }
 
 void writeObj(const std::filesystem::path& path,const TopoDS_Shape& shape) {
